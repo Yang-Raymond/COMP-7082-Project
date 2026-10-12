@@ -1,5 +1,5 @@
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { View, StyleSheet } from 'react-native';
 
 interface LatLng {
@@ -12,6 +12,10 @@ interface GhostMapProps {
   longitude: number;
   path?: LatLng[];
   ghostPosition?: LatLng;
+  showUser?: boolean;
+  fitPath?: boolean;
+  pathColor?: string;
+  interactive?: boolean;
 }
 
 const GOOGLE_MAPS_API_KEY = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY;
@@ -33,22 +37,30 @@ function loadGoogleMaps(): Promise<void> {
   return loaderPromise;
 }
 
-export default function GhostMap({ latitude, longitude, path, ghostPosition }: GhostMapProps) {
+export default function GhostMap({
+  latitude,
+  longitude,
+  path,
+  ghostPosition,
+  showUser = true,
+  fitPath = false,
+  pathColor = '#1a73e8',
+  interactive = true,
+}: GhostMapProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<any>(null);
-  const markerRef = useRef<any>(null);
-  const ghostMarkerRef = useRef<any>(null);
-  const polylineRef = useRef<any>(null);
+  const userRef = useRef<any>(null);
+  const ghostRef = useRef<any>(null);
+  const lineRef = useRef<any>(null);
+  const [ready, setReady] = useState(false);
 
   // Create the map once
   useEffect(() => {
     let cancelled = false;
-
     if (!GOOGLE_MAPS_API_KEY) {
       console.warn('EXPO_PUBLIC_GOOGLE_MAPS_API_KEY is not set — map will not load on web.');
       return;
     }
-
     loadGoogleMaps().then(() => {
       if (cancelled || !containerRef.current) return;
       const google = (window as any).google;
@@ -57,78 +69,81 @@ export default function GhostMap({ latitude, longitude, path, ghostPosition }: G
         center: { lat: latitude, lng: longitude },
         zoom: 16,
         disableDefaultUI: true,
-        zoomControl: true,
+        clickableIcons: false,
+        gestureHandling: interactive ? 'greedy' : 'none',
       });
 
-      markerRef.current = new google.maps.Marker({
-        position: { lat: latitude, lng: longitude },
-        map: mapRef.current,
-        icon: {
-          path: google.maps.SymbolPath.CIRCLE,
-          scale: 9,
-          fillColor: '#4ee6a8',
-          fillOpacity: 1,
-          strokeColor: '#0d1117',
-          strokeWeight: 2,
-        },
-      });
+      if (showUser) {
+        userRef.current = new google.maps.Marker({
+          position: { lat: latitude, lng: longitude },
+          map: mapRef.current,
+          icon: {
+            path: google.maps.SymbolPath.CIRCLE,
+            scale: 8,
+            fillColor: '#1a73e8',
+            fillOpacity: 1,
+            strokeColor: '#ffffff',
+            strokeWeight: 3,
+          },
+        });
+      }
+      setReady(true);
     });
-
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+   
   }, []);
 
-  // Move the "you are here" marker as new fixes come in
-  useEffect(() => {
-    if (mapRef.current && markerRef.current) {
-      const pos = { lat: latitude, lng: longitude };
-      markerRef.current.setPosition(pos);
-      mapRef.current.panTo(pos);
-    }
-  }, [latitude, longitude]);
 
-  // Draw / update the recorded route line
   useEffect(() => {
-    if (!mapRef.current || !path || path.length < 2) return;
+    if (!ready || !userRef.current) return;
+    const pos = { lat: latitude, lng: longitude };
+    userRef.current.setPosition(pos);
+    if (!fitPath) mapRef.current.panTo(pos);
+  }, [ready, latitude, longitude, fitPath]);
+
+  
+  useEffect(() => {
+    if (!ready) return;
     const google = (window as any).google;
+    if (lineRef.current) lineRef.current.setMap(null);
+    if (!path || path.length < 2) return;
 
-    if (polylineRef.current) polylineRef.current.setMap(null);
-
-    polylineRef.current = new google.maps.Polyline({
+    lineRef.current = new google.maps.Polyline({
       path: path.map((p) => ({ lat: p.lat, lng: p.lng })),
-      strokeColor: '#4ee6a8',
+      strokeColor: pathColor,
       strokeWeight: 4,
       map: mapRef.current,
     });
 
-    const bounds = new google.maps.LatLngBounds();
-    path.forEach((p) => bounds.extend({ lat: p.lat, lng: p.lng }));
-    mapRef.current.fitBounds(bounds);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [path]);
+    if (fitPath) {
+      const bounds = new google.maps.LatLngBounds();
+      path.forEach((p) => bounds.extend({ lat: p.lat, lng: p.lng }));
+      mapRef.current.fitBounds(bounds, 24);
+    }
+  }, [ready, path, fitPath, pathColor]);
 
-  // Draw / move the ghost marker
+ 
   useEffect(() => {
-    if (!mapRef.current || !ghostPosition) return;
+    if (!ready || !ghostPosition) return;
     const google = (window as any).google;
-
-    if (!ghostMarkerRef.current) {
-      ghostMarkerRef.current = new google.maps.Marker({
+    if (!ghostRef.current) {
+      ghostRef.current = new google.maps.Marker({
         map: mapRef.current,
+        label: '👻',
         icon: {
           path: google.maps.SymbolPath.CIRCLE,
-          scale: 9,
-          fillColor: '#7d8895',
-          fillOpacity: 0.85,
-          strokeColor: '#0d1117',
+          scale: 14,
+          fillColor: '#ffffff',
+          fillOpacity: 1,
+          strokeColor: '#6b0f2e',
           strokeWeight: 2,
         },
       });
     }
-    ghostMarkerRef.current.setPosition({ lat: ghostPosition.lat, lng: ghostPosition.lng });
-  }, [ghostPosition]);
+    ghostRef.current.setPosition({ lat: ghostPosition.lat, lng: ghostPosition.lng });
+  }, [ready, ghostPosition]);
 
   return <View ref={containerRef as any} style={styles.map} />;
 }

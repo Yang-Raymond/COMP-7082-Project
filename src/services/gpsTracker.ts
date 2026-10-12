@@ -21,7 +21,7 @@ function toGpsFix(loc: Location.LocationObject): GpsFix {
 export class GpsTracker {
   private subscription: Location.LocationSubscription | null = null;
 
-  /** Must be called (and awaited) before start() — user has to grant permission. */
+  
   async requestPermission(): Promise<boolean> {
     const { status } = await Location.requestForegroundPermissionsAsync();
     return status === "granted";
@@ -40,13 +40,27 @@ export class GpsTracker {
       this.subscription = await Location.watchPositionAsync(
         {
           accuracy: Location.Accuracy.BestForNavigation,
-          timeInterval: 1000, // ms between updates
-          distanceInterval: 1, // meters moved before update fires
+          timeInterval: 1000, 
+          distanceInterval: 1, 
         },
         (loc) => onFix(toGpsFix(loc))
       );
     } catch (err) {
       onError(err instanceof Error ? err.message : "Unknown GPS error");
+    }
+  }
+
+  
+  async getCurrent(): Promise<GpsFix | null> {
+    const granted = await this.requestPermission();
+    if (!granted) return null;
+    try {
+      const loc = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Balanced,
+      });
+      return toGpsFix(loc);
+    } catch {
+      return null;
     }
   }
 

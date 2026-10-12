@@ -1,176 +1,242 @@
-# Ghost Racer — GPS + Ghost Racing Module
+# Ghost Racer
 
-A working slice of the Ghost Racer core loop: track GPS, draw it on a map,
-record a route once, then race against your own past run as a "ghost."
-Built for the 1-week/campus MVP scope — rough edges are intentional, noted
-at the bottom.
+Ghost Racer is a mobile-first Expo app for recording a route, saving it locally, and racing against your own previous performance as a ghost. The current app combines GPS tracking, route discovery, local challenge lists, and a Supabase-backed auth flow to create a simple competitive fitness experience.
 
-## What it does right now
-1. **Track** your live position (lat/lng, accuracy, speed) via GPS
-2. **See it on a map** — Google Maps, working on both web and native
-3. **Record a route** — walk it once, name it, it's saved locally
-4. **Race it** — pick a saved route, run it again, see a live "X seconds
-   ahead/behind" readout plus a ghost marker moving along your old path
+## What the app does
 
-## Setup
-Everything's already wired into this repo — dependencies are in
-`package.json` and the Google Maps API key is already set up in `.env`.
-Just:
+- Tracks live GPS position and speed while you move
+- Records a route with duration, distance, and activity type
+- Saves completed routes locally so they can be reused later
+- Lets you search and filter saved routes by type and name
+- Races a saved route again with a live ahead/behind comparison
+- Displays the route and current location on a map for native and web builds
+- Requires sign-in/sign-up for challenge access via Supabase auth
 
-```bash
-git clone <repo-url>
-cd <project-folder>
-npm install
-npx expo start -c
-```
+## Tech stack
 
-Press `w` for web, or scan the QR code with Expo Go on your phone.
+- Expo SDK 57
+- React Native + TypeScript
+- Expo Router
+- react-native-maps
+- Supabase auth
+- AsyncStorage for local persistence
 
-## Folder structure
-```
+## Getting started
+
+1. Install dependencies:
+
+   ```bash
+   npm install
+   ```
+
+2. Add your Supabase configuration to a local `.env` file if you want auth enabled:
+
+   ```bash
+   EXPO_PUBLIC_SUPABASE_URL=your-project-url
+   EXPO_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
+   ```
+
+   If these variables are not set, the app will still start, but authentication will be unavailable.
+
+3. Start the project:
+
+   ```bash
+   npx expo start -c
+   ```
+
+4. Choose a platform:
+   - Press `w` for web
+   - Press `a` for Android
+   - Press `i` for iOS
+   - Or scan the QR code with Expo Go on a device
+
+## Current project structure
+
+```text
 src/
-  types/
-    gps.ts
-    route.ts
+  app/
+    _layout.tsx
+    index.tsx
+    explore.tsx
+  auth/
+    AuthContext.tsx
+    AuthScreen.tsx
+    auth.ts
+    index.ts
+    SignInPrompt.tsx
+    supabase.ts
+    useAuth.ts
+  components/
+    AppShell.tsx
+    BottomSheet.tsx
+    GhostMap.tsx
+    GhostMap.web.tsx
+    StartButton.tsx
+    TabBar.tsx
+    ui/
+  constants/
+    ghostTheme.ts
+    theme.ts
+  hooks/
+    useGhostRace.ts
+    useGpsTracking.ts
+    useRouteRecorder.ts
+    use-color-scheme.ts
+    use-theme.ts
+  screens/
+    HomeScreen.tsx
+    PlaceholderScreen.tsx
+    RaceScreen.tsx
+    RecordDoneScreen.tsx
+    RecordScreen.tsx
+    YouScreen.tsx
   services/
-    distance.ts
-    gpsTracker.ts
     backendClient.ts
+    distance.ts
+    elevation.ts
+    format.ts
+    gpsTracker.ts
+    ghostCompare.ts
     gpxExport.ts
     storage.ts
     storage.web.ts
-    ghostCompare.ts
-  hooks/
-    useGpsTracking.ts
-    useRouteRecorder.ts
-    useGhostRace.ts
-  components/
-    GhostMap.tsx
-    GhostMap.web.tsx
-  screens/
-    GhostRaceScreen.tsx
-    GpsTestScreen.tsx
+  types/
+    gps.ts
+    route.ts
 ```
 
-## What each file does
+## File-by-file descriptions
 
-### `types/gps.ts`
-Defines `GpsFix` (one GPS reading: lat, lng, accuracy, speed, heading,
-timestamp), `LogEntry`, and `flagAccuracy()` — a helper that labels a
-reading "good," "warn," or "bad" based on its accuracy in meters. No logic
-beyond types — nothing here talks to a device or the network.
+### Top-level project files
 
-### `types/route.ts`
-Defines `RoutePoint` (a point with elapsed time `t`, which is what turns a
-plain path into a "ghost"), `SavedRoute` (a named, saved recording), and
-`GhostDelta` (the live result of comparing your position against a ghost —
-how far ahead/behind, and where the ghost currently is).
+- `package.json` — Defines the Expo app metadata, dependencies, and npm scripts such as `start`, `web`, `android`, and `ios`.
+- `app.json` — Expo application configuration, including app name, bundle ID, and platform launch settings.
+- `babel.config.js` — Babel setup used by Expo and the project path aliases.
+- `tsconfig.json` — TypeScript compiler configuration and project path rules.
+- `expo-env.d.ts` — Type declarations for Expo environment variables used by TypeScript.
+- `README.md` — Project overview and developer documentation.
+- `scripts/reset-project.js` — Helper script for resetting scaffolded project files to a clean starting state.
 
-### `services/distance.ts`
-Pure math, zero dependencies. `haversineDistance()` computes the
-straight-line distance between two lat/lng points in meters;
-`totalDistance()` sums that across a whole route; `formatDistance()` turns
-meters into a readable string ("450 m" / "2.30 km"). Easy to unit test
-without a phone or GPS mock, since it's just functions in, numbers out.
+### `src/app` files
 
-### `services/gpsTracker.ts`
-The **only** file that imports `expo-location`. Wraps
-`watchPositionAsync` behind a small `GpsTracker` class with `start()` /
-`stop()`, converting whatever `expo-location` returns into our own
-`GpsFix` shape. If the GPS provider is ever swapped out, this is the only
-file that needs to change — nothing else in the app knows or cares how
-GPS actually works under the hood.
+- `src/app/_layout.tsx` — Root layout that mounts the app shell and overall navigation flow.
+- `src/app/index.tsx` — Default route entry; currently acts as a minimal placeholder.
+- `src/app/explore.tsx` — Demo/exploration screen used during early app scaffolding and testing.
 
-### `services/backendClient.ts`
-The **only** file that talks to a backend API. `postFix()` sends one GPS
-reading to an endpoint; `testConnection()` pings an endpoint to confirm
-it's reachable. This is the handoff point for whoever owns
-networking/storage on the team — the payload shape can change here
-without touching tracking, map, or screen code.
+### `src/auth` files
 
-### `services/gpxExport.ts`
-Turns a recorded run into a `.gpx` file (a standard format for GPS
-tracks). Lets you save a real walked route once and reuse it for testing
-later instead of re-walking it every time.
+- `src/auth/auth.ts` — Core Supabase authentication helpers for sign up, sign in, sign out, session lookup, and friendly error messages.
+- `src/auth/supabase.ts` — Creates the Supabase client, reads env variables, and configures auth persistence for web and native.
+- `src/auth/useAuth.ts` — Hook that subscribes to Supabase session changes and exposes the current auth state to the app.
+- `src/auth/AuthContext.tsx` — Global authentication provider that decides whether a user is signed in and when a prompt should block protected actions.
+- `src/auth/AuthScreen.tsx` — UI for email/password sign-in and sign-up.
+- `src/auth/SignInPrompt.tsx` — Small modal that prompts the user to sign in before racing or challenging others.
+- `src/auth/index.ts` — Barrel export for auth-related modules.
 
-### `services/storage.ts` / `services/storage.web.ts`
-Save and load `SavedRoute`s to disk, with the exact same function names
-(`getRoutes`, `saveRoute`, `deleteRoute`) on both platforms so the rest of
-the app never has to check which one it's running on. `storage.ts` uses
-`AsyncStorage` on native (iOS/Android); `storage.web.ts` uses the
-browser's `localStorage`. Metro automatically picks the right file per
-platform based on the `.web.ts` suffix — you only ever `import` from
-`'../services/storage'`, never the `.web` version directly.
+### `src/components` files
 
-### `services/ghostCompare.ts`
-The core "racing" algorithm. `computeGhostDelta()` takes a saved route
-plus your current position and elapsed time, finds the closest point on
-the old route to where you are now, and compares that point's recorded
-timestamp to your own elapsed time — that difference is how far
-ahead/behind you are. `formatDelta()` turns that into a readable string
-("12s ahead"). This file has no GPS or storage dependencies — just math —
-so it's easy to test with fake data.
+- `src/components/AppShell.tsx` — Main app shell that manages tabs, auth gating, route recording, and the race flow.
+- `src/components/BottomSheet.tsx` — Reusable bottom sheet panel used to show the challenge list on the home screen.
+- `src/components/GhostMap.tsx` — Native map implementation using `react-native-maps` to render the user, route path, and ghost marker.
+- `src/components/GhostMap.web.tsx` — Web-specific map implementation using the browser map API for browser-based runs.
+- `src/components/StartButton.tsx` — Large call-to-action button used to begin recording.
+- `src/components/TabBar.tsx` — Bottom navigation bar for Home, Record, Social, and You tabs.
+- `src/components/external-link.tsx` — Reusable external link component used by scaffolded UI patterns.
+- `src/components/hint-row.tsx` — UI row for small tips or helper text. Minor support component.
+- `src/components/web-badge.tsx` — Browser badge UI for web-focused views.
+- `src/components/animated-icon.tsx` and `animated-icon.web.tsx` — Animated icon wrappers for native and web rendering differences.
+- `src/components/app-tabs.tsx` and `app-tabs.web.tsx` — Tab pattern components used by the app scaffold and navigation patterns.
+- `src/components/themed-text.tsx` and `themed-view.tsx` — Shared themed text and container components.
+- `src/components/ui/collapsible.tsx` — Reusable collapsible UI element.
 
-### `hooks/useGpsTracking.ts`
-Combines `gpsTracker`, `backendClient`, `distance`, and a log into one
-React hook. Used by the older `GpsTestScreen` — starts/stops tracking,
-posts each fix to a backend if an endpoint is set, and keeps a running
-log and distance total. The screen component just reads this hook's
-return value; it doesn't know how any of the pieces work internally.
+### `src/constants` files
 
-### `hooks/useRouteRecorder.ts`
-Drives the "record a new route" flow. Starts a `GpsTracker`, collects
-each fix with its elapsed time into a `RoutePoint[]`, and on `save()`
-builds a `SavedRoute` (with total distance/duration) and persists it via
-`storage.ts`.
+- `src/constants/ghostTheme.ts` — Shared theme palette and shadow settings used across the app.
+- `src/constants/theme.ts` — Additional theme values and app-wide styling constants.
 
-### `hooks/useGhostRace.ts`
-Drives the "race a saved route" flow. Starts a `GpsTracker`, and on every
-new fix calls `ghostCompare.ts` to compute the live delta against the
-chosen route. Exposes `current` (your live position) and `delta` (the
-ghost comparison) for the screen to render.
+### `src/hooks` files
 
-### `components/GhostMap.tsx`
-The map for **native** (iOS/Android), built on `react-native-maps` with
-the Google provider. Renders your live position as a marker, an optional
-`path` as a line (the recorded route), and an optional `ghostPosition`
-marker (where the ghost currently is in a race).
+- `src/hooks/useRouteRecorder.ts` — The route-recording state machine. Tracks points, elapsed time, distance, and elevation while recording a run, then saves a draft route.
+- `src/hooks/useGhostRace.ts` — Race-state hook intended to compare live movement against a saved route.
+- `src/hooks/useGpsTracking.ts` — GPS hook that wraps tracking and location updates for screens that need live position data.
+- `src/hooks/use-color-scheme.ts` and `use-color-scheme.web.ts` — Theme helpers that infer light/dark system preference.
+- `src/hooks/use-theme.ts` — Shared hook for applying the active color scheme to the UI.
 
-### `components/GhostMap.web.tsx`
-The map for **web** — same props as `GhostMap.tsx` (`latitude`,
-`longitude`, `path`, `ghostPosition`), but implemented with the Google
-Maps JavaScript SDK directly, since `react-native-maps` doesn't run in a
-browser. Metro picks this file automatically when bundling for web — the
-rest of the app just imports `GhostMap` and never has to know two
-versions exist.
+### `src/screens` files
 
-### `screens/GhostRaceScreen.tsx`
-The main, current screen. Ties `useRouteRecorder`, `useGhostRace`,
-`storage.ts`, and `GhostMap` together into one flow: a menu listing saved
-routes → record a new one → name and save it → pick one to race → live
-map + ahead/behind readout. This is what's wired into `_layout.tsx`.
+- `src/screens/HomeScreen.tsx` — Main challenge list screen. Shows nearby routes, filters by type, lets users choose a route to race, and displays a map background.
+- `src/screens/RecordScreen.tsx` — Screen used to start/stop route recording, select activity type, and view live stats while recording.
+- `src/screens/RecordDoneScreen.tsx` — Review screen after a route is saved, allowing the user to add a name and save or discard the route.
+- `src/screens/RaceScreen.tsx` — Race screen that starts the live run and presents the active ghost challenge UI.
+- `src/screens/YouScreen.tsx` — User/profile area, likely for account and personal summary information.
+- `src/screens/PlaceholderScreen.tsx` — Temporary placeholder screen for tabs not yet fully implemented.
 
-### `screens/GpsTestScreen.tsx`
-An earlier, simpler screen — just raw GPS numbers (lat/lng/accuracy/speed)
-and a log, no recording or racing. Kept as a reference/fallback; superseded
-by `GhostRaceScreen` for actual use.
+### `src/services` files
 
-## How the ghost comparison works
-`ghostCompare.ts` takes your current position and finds the **closest point**
-on the saved route to where you are right now. That point's recorded
-timestamp is "how long the ghost took to get here" — compared against your
-own elapsed time, that's your delta (ahead/behind).
+- `src/services/gpsTracker.ts` — Expo Location wrapper that requests permission, starts tracking, and converts location output to the app’s normalized `GpsFix` format.
+- `src/services/distance.ts` — Math helpers for calculating distance between GPS points and summing route length.
+- `src/services/elevation.ts` — Calculates cumulative elevation gain from recorded altitude points.
+- `src/services/ghostCompare.ts` — Compares the user’s current position against a saved route and returns the ahead/behind delta used during ghost racing.
+- `src/services/backendClient.ts` — Placeholder for backend-facing network logic, including API connection checks and GPS payload submissions.
+- `src/services/gpxExport.ts` — Converts saved routes into GPX format so they can be exported or reused externally.
+- `src/services/storage.ts` — Native storage layer using AsyncStorage to store route data on mobile devices.
+- `src/services/storage.web.ts` — Web implementation of the same storage API using browser localStorage.
+- `src/services/format.ts` — Formatting helpers for clock time, route duration, and distance values shown in the UI.
 
-This is nearest-point matching, not true path-projection — simple on
-purpose, to get the full loop working first. It can misjudge position on
-routes that cross near themselves (e.g. an out-and-back path).
+### `src/types` files
 
-## Known gaps (intentional — out of scope for this pass)
-- No GPS accuracy smoothing — raw fixes only; drift near buildings will
-  show up directly in the ghost comparison
-- No background/screen-lock tracking handling yet (will drop fixes if the
-  phone locks mid-run)
-- No anti-cheat / speed-threshold checks yet
-- Ghost comparison uses nearest-point matching, not true route projection
-- No route discovery/sharing — routes are stored per-device, not synced
-- No auth — anyone using the device sees the same local route list
+- `src/types/gps.ts` — Data model for GPS fixes, tracking status, and accuracy classification rules.
+- `src/types/route.ts` — Core route data model, including route points, saved route records, and ghost-race delta information.
+
+### `src/global.css`
+
+- Global CSS stylesheet for web styling and global app-level presentation.
+
+## App flow
+
+- `src/app/_layout.tsx` mounts the main shell
+- `src/auth` handles sign-in, sign-up, and auth state
+- `src/screens/HomeScreen.tsx` shows saved challenge routes and the nearby map
+- `src/screens/RecordScreen.tsx` records a new route
+- `src/screens/RaceScreen.tsx` compares your live run against a saved ghost route
+- `src/services/storage.ts` stores route data locally on device
+- `src/services/ghostCompare.ts` computes the ahead/behind delta during a race
+
+## Main modules
+
+### Auth and session management
+
+The authentication layer lives in `src/auth`, using Supabase for email/password sign-in and sign-up. `AuthContext` provides app-wide access to user state and route access gating.
+
+### GPS and route tracking
+
+- `src/services/gpsTracker.ts` wraps Expo Location tracking and normalizes GPS readings
+- `src/services/distance.ts` handles distance calculations
+- `src/hooks/useRouteRecorder.ts` records a run and saves a route snapshot
+- `src/types/route.ts` defines the saved route and timing data model
+
+### Ghost racing logic
+
+- `src/services/ghostCompare.ts` compares your current position to the saved route and produces the delta
+- `src/screens/RaceScreen.tsx` links the live tracker to the map and ghost progress readout
+- `src/components/GhostMap.tsx` and `src/components/GhostMap.web.tsx` render the map for native and web environments
+
+## Notes
+
+- Routes are currently stored locally per device.
+- The app is built as a campus MVP and focuses on the core ghost-racing loop rather than full social sharing or backend syncing.
+- Auth is optional at startup, but challenge access is controlled by the session state when Supabase is configured.
+
+## Useful commands
+
+```bash
+npm install
+npx expo start -c
+npm run web
+npm run android
+npm run ios
+```
+
+## License
+
+This project is licensed under the terms in the repository license file.

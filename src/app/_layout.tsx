@@ -1,5 +1,5 @@
-import GhostRaceScreen from '@/screens/GhostRaceScreen';
+import AppShell from '@/components/AppShell';
 
 export default function RootLayout() {
-  return <GhostRaceScreen />;
+  return <AppShell />;
 }
