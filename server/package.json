@@ -3,7 +3,8 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
-    "dev": "tsx watch --env-file=.env src/index.ts"
+    "dev": "tsx watch --env-file=.env src/index.ts",
+    "dev:local": "tsx watch --env-file=.env.local src/index.ts"
   },
   "keywords": [],
   "author": "",

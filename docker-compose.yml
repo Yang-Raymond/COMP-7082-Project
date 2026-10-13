@@ -1,0 +1,19 @@
+services:
+  db:
+    build: ./db
+    environment:
+      POSTGRES_USER: ghostracer
+      POSTGRES_PASSWORD: ghostracer
+      POSTGRES_DB: ghostracer
+    ports:
+      - "127.0.0.1:5433:5432"
+    volumes:
+      - db-data:/var/lib/postgresql
+      - ./db/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ghostracer -d ghostracer"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+volumes:
+  db-data:
