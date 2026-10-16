@@ -1,54 +1,85 @@
+// Install: npx expo install expo-secure-store
+// .env:    EXPO_PUBLIC_API_URL=http://<your-computer-LAN-IP>:3000   (not localhost; your phone can't reach that)
+import * as SecureStore from 'expo-secure-store';
 
-import type { Session } from '@supabase/supabase-js';
-import { supabase } from './supabase';
+const API_URL = process.env.EXPO_PUBLIC_API_URL;
+const TOKEN_KEY = 'ghostracer_token';
+export const isAuthConfigured = Boolean(API_URL);
+export type AuthUser = { id: number; username: string; email: string; points: number };
+export type Session = { token: string; user: AuthUser };
 
-function client() {
-  if (!supabase) {
-    throw new Error('Login is not configured. Add the Supabase keys to your .env file.');
+const listeners = new Set<(s: Session | null) => void>();
+const notify = (s: Session | null) => listeners.forEach((cb) => cb(s));
+
+async function api<T>(path: string, body?: unknown, token?: string): Promise<T> {
+  if (!API_URL) throw new Error('Login is not configured. Add EXPO_PUBLIC_API_URL to your .env file.');
+  try {
+    const res = await fetch(`${API_URL}${path}`, {
+      method: body ? 'POST' : 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error ?? `Request failed (${res.status})`);
+    return data as T;
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    throw new Error(`${msg} [${API_URL}${path}]`);
   }
-  return supabase;
 }
 
-
-export async function signUp(email: string, password: string): Promise<{ needsConfirmation: boolean }> {
-  const { data, error } = await client().auth.signUp({ email, password });
-  if (error) throw error;
-  return { needsConfirmation: !data.session };
+export async function signUp(
+  username: string,
+  email: string,
+  password: string
+): Promise<{ needsConfirmation: boolean }> {
+  const session = await api<Session>('/auth/signup', { username, email, password });
+  await SecureStore.setItemAsync(TOKEN_KEY, session.token);
+  notify(session);
+  return { needsConfirmation: false };
 }
 
 export async function signIn(email: string, password: string): Promise<void> {
-  const { error } = await client().auth.signInWithPassword({ email, password });
-  if (error) throw error;
+  const session = await api<Session>('/auth/login', { email, password });
+  await SecureStore.setItemAsync(TOKEN_KEY, session.token);
+  notify(session);
 }
 
 export async function signOut(): Promise<void> {
-  const { error } = await client().auth.signOut();
-  if (error) throw error;
+  await SecureStore.deleteItemAsync(TOKEN_KEY);
+  notify(null);
 }
 
 export async function getSession(): Promise<Session | null> {
-  if (!supabase) return null;
-  const { data } = await supabase.auth.getSession();
-  return data.session;
+  const token = await SecureStore.getItemAsync(TOKEN_KEY);
+  if (!token) return null;
+  try {
+    const { user } = await api<{ user: AuthUser }>('/auth/me', undefined, token);
+    return { token, user };
+  } catch (e) {
+    const m = (e instanceof Error ? e.message : '').toLowerCase();
+    // Only drop the token if the server rejected it, not if we're just offline
+    if (m.includes('invalid login credentials')) await SecureStore.deleteItemAsync(TOKEN_KEY);
+    return null;
+  }
 }
 
-
 export function onAuthChange(callback: (session: Session | null) => void): () => void {
-  if (!supabase) return () => {};
-  const { data } = supabase.auth.onAuthStateChange((_event, session) => callback(session));
-  return () => data.subscription.unsubscribe();
+  listeners.add(callback);
+  return () => {
+    listeners.delete(callback);
+  };
 }
 
 export function friendlyAuthError(e: unknown): string {
   const msg = e instanceof Error ? e.message : String(e);
   const m = msg.toLowerCase();
   if (m.includes('invalid login credentials')) return 'Wrong email or password.';
-  if (m.includes('email not confirmed')) return 'Please confirm your email first. Check your inbox.';
-  if (m.includes('already registered') || m.includes('already been registered'))
-    return 'An account with this email already exists. Try signing in.';
-  if (m.includes('rate limit') || m.includes('too many'))
-    return 'Too many attempts. Wait a minute and try again.';
-  if (m.includes('network') || m.includes('failed to fetch'))
+  if (m.includes('already registered')) return 'An account with this email or username already exists. Try signing in.';
+  if (m.includes('network request failed') || m.includes('failed to fetch'))
     return "Can't reach the server. Check your connection.";
   if (m.includes('password should be')) return 'Password is too weak. Use at least 6 characters.';
   return msg;

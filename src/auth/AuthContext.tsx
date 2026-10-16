@@ -1,11 +1,11 @@
 
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
-import type { Session, User } from '@supabase/supabase-js';
+import type { AuthUser, Session } from './auth';
 import { useAuth } from './useAuth';
 
 interface AuthContextValue {
   session: Session | null;
-  user: User | null;
+  user: AuthUser | null;
   isSignedIn: boolean;
  
   canChallenge: boolean;
