@@ -112,7 +112,7 @@ export default function HomeScreen({ onRace }: { onRace: (r: SavedRoute) => void
                 <Ionicons name="trash-outline" size={20} color={colors.muted} />
               </Pressable>
               <Pressable style={s.raceBtn} onPress={() => onRace(r)}>
-                {!canChallenge && <Ionicons name="lock-closed" size={13} color="#fff" />}
+                {!canChallenge && <Ionicons name="lock-closed" size={13} color={colors.onPrimary} />}
                 <Text style={s.raceText}>Race</Text>
               </Pressable>
             </View>
@@ -148,7 +148,7 @@ const s = StyleSheet.create({
   card: { borderWidth: 1, borderColor: colors.border, borderRadius: 16, padding: 14, backgroundColor: colors.bg, gap: 10 },
   cardHead: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   avatar: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center' },
-  avatarText: { color: '#fff', fontWeight: '700', fontSize: 16 },
+  avatarText: { color: colors.onPrimary, fontWeight: '700', fontSize: 16 },
   cardTitle: { fontSize: 16, fontWeight: '700', color: colors.text },
   cardSub: { fontSize: 12, color: colors.muted },
   tag: { borderWidth: 1, borderColor: colors.border, borderRadius: 12, paddingHorizontal: 10, paddingVertical: 3 },
@@ -159,5 +159,5 @@ const s = StyleSheet.create({
   unit: { fontSize: 14, fontWeight: '600' },
   actions: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 14 },
   raceBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: colors.primary, borderRadius: 18, paddingHorizontal: 20, paddingVertical: 9 },
-  raceText: { color: '#fff', fontWeight: '700', fontSize: 14 },
+  raceText: { color: colors.onPrimary, fontWeight: '700', fontSize: 14 },
 });

@@ -50,7 +50,7 @@ export default function StartButton({ onPress }: { onPress: () => void }) {
         style={[s.ring, { opacity: ringOpacity, transform: [{ scale: Animated.multiply(scale, ringScale) }] }]}
       />
       <Animated.View style={[s.button, { transform: [{ scale }] }]}>
-        <Ionicons name="play" size={38} color="#0b2b25" />
+        <Ionicons name="play" size={38} color={colors.onPrimary} />
         <Text style={s.text}>Start</Text>
       </Animated.View>
     </Pressable>
@@ -59,7 +59,7 @@ export default function StartButton({ onPress }: { onPress: () => void }) {
 
 const s = StyleSheet.create({
   wrap: { position: 'absolute', top: -60, width: 124, height: 124, alignItems: 'center', justifyContent: 'center' },
-  ring: { position: 'absolute', width: 124, height: 124, borderRadius: 62, backgroundColor: colors.mint },
-  button: { width: 100, height: 100, borderRadius: 50, backgroundColor: colors.mint, alignItems: 'center', justifyContent: 'center' },
-  text: { fontSize: 17, fontWeight: '700', color: '#0b2b25' },
+  ring: { position: 'absolute', width: 124, height: 124, borderRadius: 62, backgroundColor: colors.primary },
+  button: { width: 100, height: 100, borderRadius: 50, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center' },
+  text: { fontSize: 17, fontWeight: '700', color: colors.onPrimary },
 });

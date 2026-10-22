@@ -1,14 +1,20 @@
+// Central colour palette and shadow style for GhostRacer.
+// Palette: https://coolors.co/d4dcff-7d83ff-007fff-1affd5-590925
+// All screens/components must read colours from here instead of hardcoding hex values.
+
 export const colors = {
-  primary: '#6b0f2e',
-  primaryDark: '#4d0a21',
-  mint: '#1de9b6',
-  lavender: '#e6e3f9',
-  bg: '#ffffff',
-  text: '#2b0a17',
+  primary: '#590925',
+  primaryDark: '#3d0619',
+  onPrimary: '#fbfbfb',
+  mint: '#1AFFD5',
+  lavender: '#D4DCFF',
+  accent: '#7D83FF',
+  bg: '#fbfbfb',
+  text: '#2a0412',
   muted: '#6b6370',
-  border: '#e8e0e4',
-  chipActive: '#f3e3ea',
-  blue: '#1a73e8',
+  border: '#e3e7ff',
+  chipActive: '#D4DCFF',
+  blue: '#007FFF',
   ahead: '#0f9d75',
   behind: '#c62828',
 };

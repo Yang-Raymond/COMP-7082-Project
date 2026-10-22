@@ -79,7 +79,6 @@ export default function BottomSheet({ title, children }: { title: string; childr
             <View style={s.handle} />
             <View style={s.titleRow}>
               <Text style={s.title}>{title}</Text>
-              <Ionicons name={snap === 'expanded' ? 'chevron-down' : 'chevron-up'} size={24} color={colors.primary} />
             </View>
           </View>
           <ScrollView
@@ -102,5 +101,5 @@ const s = StyleSheet.create({
   header: { height: HEADER, paddingHorizontal: 20, paddingTop: 10, ...noSelect },
   handle: { alignSelf: 'center', width: 56, height: 5, borderRadius: 3, backgroundColor: colors.primary, marginBottom: 14 },
   titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  title: { fontSize: 20, fontWeight: '700', color: colors.text },
+  title: { fontSize: 20, fontWeight: '700', color: colors.primary },
 });

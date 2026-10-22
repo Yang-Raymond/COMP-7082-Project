@@ -57,7 +57,6 @@ src/
   app/
     _layout.tsx
     index.tsx
-    explore.tsx
   auth/
     AuthContext.tsx
     AuthScreen.tsx
@@ -73,16 +72,12 @@ src/
     GhostMap.web.tsx
     StartButton.tsx
     TabBar.tsx
-    ui/
   constants/
     ghostTheme.ts
-    theme.ts
   hooks/
     useGhostRace.ts
     useGpsTracking.ts
     useRouteRecorder.ts
-    use-color-scheme.ts
-    use-theme.ts
   screens/
     HomeScreen.tsx
     PlaceholderScreen.tsx
@@ -121,7 +116,6 @@ src/
 
 - `src/app/_layout.tsx` — Root layout that mounts the app shell and overall navigation flow.
 - `src/app/index.tsx` — Default route entry; currently acts as a minimal placeholder.
-- `src/app/explore.tsx` — Demo/exploration screen used during early app scaffolding and testing.
 
 ### `src/auth` files
 
@@ -141,26 +135,16 @@ src/
 - `src/components/GhostMap.web.tsx` — Web-specific map implementation using the browser map API for browser-based runs.
 - `src/components/StartButton.tsx` — Large call-to-action button used to begin recording.
 - `src/components/TabBar.tsx` — Bottom navigation bar for Home, Record, Social, and You tabs.
-- `src/components/external-link.tsx` — Reusable external link component used by scaffolded UI patterns.
-- `src/components/hint-row.tsx` — UI row for small tips or helper text. Minor support component.
-- `src/components/web-badge.tsx` — Browser badge UI for web-focused views.
-- `src/components/animated-icon.tsx` and `animated-icon.web.tsx` — Animated icon wrappers for native and web rendering differences.
-- `src/components/app-tabs.tsx` and `app-tabs.web.tsx` — Tab pattern components used by the app scaffold and navigation patterns.
-- `src/components/themed-text.tsx` and `themed-view.tsx` — Shared themed text and container components.
-- `src/components/ui/collapsible.tsx` — Reusable collapsible UI element.
 
 ### `src/constants` files
 
 - `src/constants/ghostTheme.ts` — Shared theme palette and shadow settings used across the app.
-- `src/constants/theme.ts` — Additional theme values and app-wide styling constants.
 
 ### `src/hooks` files
 
 - `src/hooks/useRouteRecorder.ts` — The route-recording state machine. Tracks points, elapsed time, distance, and elevation while recording a run, then saves a draft route.
 - `src/hooks/useGhostRace.ts` — Race-state hook intended to compare live movement against a saved route.
 - `src/hooks/useGpsTracking.ts` — GPS hook that wraps tracking and location updates for screens that need live position data.
-- `src/hooks/use-color-scheme.ts` and `use-color-scheme.web.ts` — Theme helpers that infer light/dark system preference.
-- `src/hooks/use-theme.ts` — Shared hook for applying the active color scheme to the UI.
 
 ### `src/screens` files
 
@@ -187,10 +171,6 @@ src/
 
 - `src/types/gps.ts` — Data model for GPS fixes, tracking status, and accuracy classification rules.
 - `src/types/route.ts` — Core route data model, including route points, saved route records, and ghost-race delta information.
-
-### `src/global.css`
-
-- Global CSS stylesheet for web styling and global app-level presentation.
 
 ## App flow
 

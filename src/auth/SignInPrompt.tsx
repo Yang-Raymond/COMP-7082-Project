@@ -32,12 +32,12 @@ export default function SignInPrompt({ reason, onSignIn, onCancel }: Props) {
 }
 
 const s = StyleSheet.create({
-  backdrop: { ...StyleSheet.absoluteFill, backgroundColor: 'rgba(20,5,12,0.5)', alignItems: 'center', justifyContent: 'center', padding: 24, zIndex: 100, elevation: 100 },
+  backdrop: { ...StyleSheet.absoluteFill, backgroundColor: 'rgba(89,9,37,0.5)', alignItems: 'center', justifyContent: 'center', padding: 24, zIndex: 100, elevation: 100 },
   card: { width: '100%', maxWidth: 360, backgroundColor: colors.bg, borderRadius: 24, padding: 24, alignItems: 'center', gap: 10 },
   iconWrap: { width: 56, height: 56, borderRadius: 28, backgroundColor: colors.chipActive, alignItems: 'center', justifyContent: 'center', marginBottom: 4 },
   title: { fontSize: 20, fontWeight: '800', color: colors.text },
   body: { fontSize: 15, color: colors.muted, textAlign: 'center', marginBottom: 8 },
   primary: { alignSelf: 'stretch', height: 52, borderRadius: 26, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center' },
-  primaryText: { color: '#fff', fontSize: 17, fontWeight: '700' },
+  primaryText: { color: colors.onPrimary, fontSize: 17, fontWeight: '700' },
   cancel: { color: colors.muted, fontSize: 14, fontWeight: '600', marginTop: 4 },
 });
