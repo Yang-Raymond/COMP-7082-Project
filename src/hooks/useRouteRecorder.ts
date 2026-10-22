@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { GpsTracker } from '../services/gpsTracker';
-import { saveRoute } from '../services/storage';
+import { saveLastLocation, saveRoute } from '../services/storage';
 import { totalDistance } from '../services/distance';
 import { elevationGain } from '../services/elevation';
 import { ActivityType, RoutePoint, SavedRoute } from '../types/route';
@@ -118,5 +118,7 @@ export async function saveDraft(draft: RouteDraft, name: string): Promise<SavedR
     activity: draft.activity,
   };
   await saveRoute(route);
+  const end = draft.points[draft.points.length - 1];
+  if (end) await saveLastLocation({ lat: end.lat, lng: end.lng });
   return route;
 }

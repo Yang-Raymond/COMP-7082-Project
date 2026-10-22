@@ -37,8 +37,7 @@ export default function RecordDoneScreen({ draft, onSave, onSaveAndChallenge, on
         <View style={s.map}>
           {first && (
             <GhostMap
-              latitude={first.lat}
-              longitude={first.lng}
+              center={first}
               path={draft.points}
               showUser={false}
               fitPath

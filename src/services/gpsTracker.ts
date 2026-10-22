@@ -64,6 +64,22 @@ export class GpsTracker {
     }
   }
 
+  /**
+   * Returns the OS's cached last-known position without spinning up GPS.
+   * Only checks (never requests) permission so it can't trigger a second prompt
+   * alongside getCurrent(). Resolves null when unavailable.
+   */
+  async getLastKnown(): Promise<GpsFix | null> {
+    try {
+      const { status } = await Location.getForegroundPermissionsAsync();
+      if (status !== "granted") return null;
+      const loc = await Location.getLastKnownPositionAsync();
+      return loc ? toGpsFix(loc) : null;
+    } catch {
+      return null;
+    }
+  }
+
   stop(): void {
     this.subscription?.remove();
     this.subscription = null;

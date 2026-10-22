@@ -24,11 +24,11 @@ const FIT_PADDING = 24;
  * Renders the Mapbox map. Coordinates are converted to Mapbox's
  * [longitude, latitude] order. When `fitPath` is set and the path has at least
  * two points, the camera is bounded to the path's extent; otherwise it centers
- * on the given latitude/longitude.
+ * on `center`. With no center yet, the camera is left at Mapbox's default view
+ * and no user dot is drawn.
  */
 export default function GhostMap({
-  latitude,
-  longitude,
+  center,
   path,
   ghostPosition,
   showUser = true,
@@ -75,14 +75,14 @@ export default function GhostMap({
     >
       {bounds ? (
         <Mapbox.Camera bounds={bounds} animationDuration={0} />
-      ) : (
+      ) : center ? (
         <Mapbox.Camera
-          centerCoordinate={[longitude, latitude]}
+          centerCoordinate={[center.lng, center.lat]}
           zoomLevel={FOLLOW_ZOOM}
           animationMode="easeTo"
           animationDuration={300}
         />
-      )}
+      ) : null}
 
       {pathShape && (
         <Mapbox.ShapeSource id="ghost-path" shape={pathShape}>
@@ -105,8 +105,8 @@ export default function GhostMap({
         </Mapbox.MarkerView>
       )}
 
-      {showUser && (
-        <Mapbox.MarkerView coordinate={[longitude, latitude]} anchor={{ x: 0.5, y: 0.5 }} allowOverlap>
+      {showUser && center && (
+        <Mapbox.MarkerView coordinate={[center.lng, center.lat]} anchor={{ x: 0.5, y: 0.5 }} allowOverlap>
           <View style={styles.userDot} />
         </Mapbox.MarkerView>
       )}

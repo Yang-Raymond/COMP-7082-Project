@@ -6,12 +6,12 @@ import { colors } from '../constants/ghostTheme';
 import type { GhostMapProps } from '../types/map';
 
 /** Renders a themed placeholder with the center coordinates; map props are otherwise ignored. */
-export default function GhostMap({ latitude, longitude }: GhostMapProps) {
+export default function GhostMap({ center }: GhostMapProps) {
   return (
     <View style={styles.box}>
       <Text style={styles.title}>Map available on iOS/Android</Text>
       <Text style={styles.coords}>
-        {latitude.toFixed(5)}, {longitude.toFixed(5)}
+        {center ? `${center.lat.toFixed(5)}, ${center.lng.toFixed(5)}` : 'Locating…'}
       </Text>
     </View>
   );

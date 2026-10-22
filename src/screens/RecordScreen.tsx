@@ -1,17 +1,16 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import GhostMap from '../components/GhostMap';
 import StartButton from '../components/StartButton';
 import { useAuthContext } from '../auth';
 import RecordDoneScreen from './RecordDoneScreen';
-import { GpsTracker } from '../services/gpsTracker';
+import { useCurrentPosition } from '../hooks/useCurrentPosition';
 import { RouteDraft, saveDraft, useRouteRecorder } from '../hooks/useRouteRecorder';
 import { formatClock, formatKm } from '../services/format';
 import { colors, shadow } from '../constants/ghostTheme';
 import { ActivityType } from '../types/route';
 
-const FALLBACK = { lat: 49.2494, lng: -122.9987 };
 
 interface Props {
   /** Recorder state lives in AppShell so a run survives tab switches. */
@@ -23,19 +22,11 @@ interface Props {
 
 export default function RecordScreen({ rec, draft, onDraft, onSaved }: Props) {
   const { requireAuth } = useAuthContext();
-  const [pos, setPos] = useState(FALLBACK);
-  const tracker = useRef(new GpsTracker());
-
-  // Center the map on the user before recording starts
-  useEffect(() => {
-    tracker.current.getCurrent().then((fix) => {
-      if (fix) setPos({ lat: fix.lat, lng: fix.lng });
-    });
-  }, []);
+  const { position, isLive } = useCurrentPosition();
 
   const recording = rec.status !== 'idle';
   const last = rec.points[rec.points.length - 1];
-  const center = last ? { lat: last.lat, lng: last.lng } : pos;
+  const center = last ? { lat: last.lat, lng: last.lng } : position;
 
   const finish = () => onDraft(rec.finish());
 
@@ -66,8 +57,8 @@ export default function RecordScreen({ rec, draft, onDraft, onSaved }: Props) {
     <View style={s.root}>
       <View style={StyleSheet.absoluteFill}>
         <GhostMap
-          latitude={center.lat}
-          longitude={center.lng}
+          center={center}
+          showUser={isLive || recording}
           path={rec.points.map((p) => ({ lat: p.lat, lng: p.lng }))}
         />
       </View>

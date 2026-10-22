@@ -1,18 +1,17 @@
 
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, TextInput, Pressable, ScrollView, Platform, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import GhostMap from '../components/GhostMap';
 import BottomSheet from '../components/BottomSheet';
 import { useAuthContext } from '../auth';
-import { GpsTracker } from '../services/gpsTracker';
+import { useCurrentPosition } from '../hooks/useCurrentPosition';
 import { getRoutes, deleteRoute } from '../services/storage';
 import { formatKm, formatMinSec } from '../services/format';
 import { colors, shadow } from '../constants/ghostTheme';
 import { ActivityType, SavedRoute } from '../types/route';
 
-const FALLBACK = { lat: 49.2494, lng: -122.9987 }; 
 
 type IconName = React.ComponentProps<typeof Ionicons>['name'];
 
@@ -23,14 +22,10 @@ export default function HomeScreen({ onRace }: { onRace: (r: SavedRoute) => void
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<ActivityType | null>(null);
   const [publicOnly, setPublicOnly] = useState(false); 
-  const [pos, setPos] = useState(FALLBACK);
-  const tracker = useRef(new GpsTracker());
+  const { position, isLive } = useCurrentPosition();
 
   useEffect(() => {
     getRoutes().then(setRoutes);
-    tracker.current.getCurrent().then((fix) => {
-      if (fix) setPos({ lat: fix.lat, lng: fix.lng });
-    });
   }, []);
 
   const visible = useMemo(
@@ -122,7 +117,7 @@ export default function HomeScreen({ onRace }: { onRace: (r: SavedRoute) => void
     </>
   );
 
-  const map = <GhostMap latitude={pos.lat} longitude={pos.lng} />;
+  const map = <GhostMap center={position} showUser={isLive} />;
 
   return (
     <View style={s.root}>

@@ -7,8 +7,8 @@ export interface LatLng {
 }
 
 export interface GhostMapProps {
-  latitude: number;
-  longitude: number;
+  /** Camera center and user-dot position; null/undefined while no location is known yet. */
+  center?: LatLng | null;
   /** Route polyline to draw. */
   path?: LatLng[];
   /** Current ghost position during a race. */
