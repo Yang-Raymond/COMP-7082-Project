@@ -68,7 +68,7 @@ export default function RecordDoneScreen({ draft, onSave, onSaveAndChallenge, on
       )}
       <Pressable style={s.primary} onPress={() => onSaveAndChallenge(finalName)}>
         <Text style={s.primaryText}>Save & Challenge</Text>
-        <Ionicons name={canChallenge ? 'arrow-forward' : 'lock-closed'} size={20} color="#fff" />
+        <Ionicons name={canChallenge ? 'arrow-forward' : 'lock-closed'} size={20} color={colors.onPrimary} />
       </Pressable>
       <View style={s.row}>
         <Pressable style={s.secondary} onPress={() => onSave(finalName)}>
@@ -109,7 +109,7 @@ const s = StyleSheet.create({
   input: { marginTop: 14, borderWidth: 1, borderColor: colors.border, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10, fontSize: 14, color: colors.text },
   hint: { textAlign: 'center', color: colors.muted, fontSize: 13, marginBottom: 10 },
   primary: { height: 60, borderRadius: 30, backgroundColor: colors.primary, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10 },
-  primaryText: { color: '#fff', fontSize: 18, fontWeight: '700' },
+  primaryText: { color: colors.onPrimary, fontSize: 18, fontWeight: '700' },
   row: { flexDirection: 'row', gap: 12, marginTop: 14 },
   secondary: { flex: 1, height: 52, borderRadius: 26, borderWidth: 1, borderColor: colors.border, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
   discard: { flex: 1, height: 52, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },

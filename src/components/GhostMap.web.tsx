@@ -1,6 +1,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { View, StyleSheet } from 'react-native';
+import { colors } from '../constants/ghostTheme';
 
 interface LatLng {
   lat: number;
@@ -44,7 +45,7 @@ export default function GhostMap({
   ghostPosition,
   showUser = true,
   fitPath = false,
-  pathColor = '#1a73e8',
+  pathColor = colors.blue,
   interactive = true,
 }: GhostMapProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -80,9 +81,9 @@ export default function GhostMap({
           icon: {
             path: google.maps.SymbolPath.CIRCLE,
             scale: 8,
-            fillColor: '#1a73e8',
+            fillColor: colors.blue,
             fillOpacity: 1,
-            strokeColor: '#ffffff',
+            strokeColor: colors.bg,
             strokeWeight: 3,
           },
         });
@@ -135,9 +136,9 @@ export default function GhostMap({
         icon: {
           path: google.maps.SymbolPath.CIRCLE,
           scale: 14,
-          fillColor: '#ffffff',
+          fillColor: colors.bg,
           fillOpacity: 1,
-          strokeColor: '#6b0f2e',
+          strokeColor: colors.primary,
           strokeWeight: 2,
         },
       });
