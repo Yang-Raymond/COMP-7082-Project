@@ -1,154 +1,30 @@
-
-import { useEffect, useRef, useState } from 'react';
-import { View, StyleSheet } from 'react-native';
+// Web placeholder for GhostMap. The app targets iOS/Android only; web is used
+// for quick UI checks. This file keeps Metro from bundling the native Mapbox SDK
+// on web and shows a simple box with the current coordinates instead.
+import { View, Text, StyleSheet } from 'react-native';
 import { colors } from '../constants/ghostTheme';
+import type { GhostMapProps } from '../types/map';
 
-interface LatLng {
-  lat: number;
-  lng: number;
-}
-
-interface GhostMapProps {
-  latitude: number;
-  longitude: number;
-  path?: LatLng[];
-  ghostPosition?: LatLng;
-  showUser?: boolean;
-  fitPath?: boolean;
-  pathColor?: string;
-  interactive?: boolean;
-}
-
-const GOOGLE_MAPS_API_KEY = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY;
-
-let loaderPromise: Promise<void> | null = null;
-
-function loadGoogleMaps(): Promise<void> {
-  if (loaderPromise) return loaderPromise;
-  loaderPromise = new Promise((resolve, reject) => {
-    const w = window as any;
-    if (w.google?.maps?.Map) return resolve();
-    const script = document.createElement('script');
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${GOOGLE_MAPS_API_KEY}`;
-    script.async = true;
-    script.onload = () => resolve();
-    script.onerror = () => reject(new Error('Failed to load Google Maps script'));
-    document.head.appendChild(script);
-  });
-  return loaderPromise;
-}
-
-export default function GhostMap({
-  latitude,
-  longitude,
-  path,
-  ghostPosition,
-  showUser = true,
-  fitPath = false,
-  pathColor = colors.blue,
-  interactive = true,
-}: GhostMapProps) {
-  const containerRef = useRef<HTMLDivElement | null>(null);
-  const mapRef = useRef<any>(null);
-  const userRef = useRef<any>(null);
-  const ghostRef = useRef<any>(null);
-  const lineRef = useRef<any>(null);
-  const [ready, setReady] = useState(false);
-
-  // Create the map once
-  useEffect(() => {
-    let cancelled = false;
-    if (!GOOGLE_MAPS_API_KEY) {
-      console.warn('EXPO_PUBLIC_GOOGLE_MAPS_API_KEY is not set — map will not load on web.');
-      return;
-    }
-    loadGoogleMaps().then(() => {
-      if (cancelled || !containerRef.current) return;
-      const google = (window as any).google;
-
-      mapRef.current = new google.maps.Map(containerRef.current, {
-        center: { lat: latitude, lng: longitude },
-        zoom: 16,
-        disableDefaultUI: true,
-        clickableIcons: false,
-        gestureHandling: interactive ? 'greedy' : 'none',
-      });
-
-      if (showUser) {
-        userRef.current = new google.maps.Marker({
-          position: { lat: latitude, lng: longitude },
-          map: mapRef.current,
-          icon: {
-            path: google.maps.SymbolPath.CIRCLE,
-            scale: 8,
-            fillColor: colors.blue,
-            fillOpacity: 1,
-            strokeColor: colors.bg,
-            strokeWeight: 3,
-          },
-        });
-      }
-      setReady(true);
-    });
-    return () => {
-      cancelled = true;
-    };
-   
-  }, []);
-
-
-  useEffect(() => {
-    if (!ready || !userRef.current) return;
-    const pos = { lat: latitude, lng: longitude };
-    userRef.current.setPosition(pos);
-    if (!fitPath) mapRef.current.panTo(pos);
-  }, [ready, latitude, longitude, fitPath]);
-
-  
-  useEffect(() => {
-    if (!ready) return;
-    const google = (window as any).google;
-    if (lineRef.current) lineRef.current.setMap(null);
-    if (!path || path.length < 2) return;
-
-    lineRef.current = new google.maps.Polyline({
-      path: path.map((p) => ({ lat: p.lat, lng: p.lng })),
-      strokeColor: pathColor,
-      strokeWeight: 4,
-      map: mapRef.current,
-    });
-
-    if (fitPath) {
-      const bounds = new google.maps.LatLngBounds();
-      path.forEach((p) => bounds.extend({ lat: p.lat, lng: p.lng }));
-      mapRef.current.fitBounds(bounds, 24);
-    }
-  }, [ready, path, fitPath, pathColor]);
-
- 
-  useEffect(() => {
-    if (!ready || !ghostPosition) return;
-    const google = (window as any).google;
-    if (!ghostRef.current) {
-      ghostRef.current = new google.maps.Marker({
-        map: mapRef.current,
-        label: '👻',
-        icon: {
-          path: google.maps.SymbolPath.CIRCLE,
-          scale: 14,
-          fillColor: colors.bg,
-          fillOpacity: 1,
-          strokeColor: colors.primary,
-          strokeWeight: 2,
-        },
-      });
-    }
-    ghostRef.current.setPosition({ lat: ghostPosition.lat, lng: ghostPosition.lng });
-  }, [ready, ghostPosition]);
-
-  return <View ref={containerRef as any} style={styles.map} />;
+/** Renders a themed placeholder with the center coordinates; map props are otherwise ignored. */
+export default function GhostMap({ latitude, longitude }: GhostMapProps) {
+  return (
+    <View style={styles.box}>
+      <Text style={styles.title}>Map available on iOS/Android</Text>
+      <Text style={styles.coords}>
+        {latitude.toFixed(5)}, {longitude.toFixed(5)}
+      </Text>
+    </View>
+  );
 }
 
 const styles = StyleSheet.create({
-  map: { width: '100%', height: '100%' },
+  box: {
+    width: '100%',
+    height: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.border,
+  },
+  title: { color: colors.text, fontWeight: '600' },
+  coords: { color: colors.muted, marginTop: 4 },
 });
