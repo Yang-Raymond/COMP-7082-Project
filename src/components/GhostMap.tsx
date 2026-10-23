@@ -25,7 +25,8 @@ const FIT_PADDING = 24;
  * [longitude, latitude] order. When `fitPath` is set and the path has at least
  * two points, the camera is bounded to the path's extent; otherwise it centers
  * on `center`. With no center yet, the camera is left at Mapbox's default view
- * and no user dot is drawn.
+ * and no user dot is drawn. The first center is applied instantly via
+ * `defaultSettings`; later center changes ease.
  */
 export default function GhostMap({
   center,
@@ -77,6 +78,9 @@ export default function GhostMap({
         <Mapbox.Camera bounds={bounds} animationDuration={0} />
       ) : center ? (
         <Mapbox.Camera
+          // Applied once on mount without animation, so a freshly mounted map opens on the
+          // user instead of easing in from Mapbox's default 0,0 camera.
+          defaultSettings={{ centerCoordinate: [center.lng, center.lat], zoomLevel: FOLLOW_ZOOM }}
           centerCoordinate={[center.lng, center.lat]}
           zoomLevel={FOLLOW_ZOOM}
           animationMode="easeTo"

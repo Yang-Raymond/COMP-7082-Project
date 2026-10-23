@@ -7,6 +7,7 @@ import RaceScreen from '../screens/RaceScreen';
 import PlaceholderScreen from '../screens/PlaceholderScreen';
 import YouScreen from '../screens/YouScreen';
 import { AuthProvider, SignInPrompt, useAuthContext } from '../auth';
+import { LocationProvider } from '../hooks/useCurrentPosition';
 import { RouteDraft, useRouteRecorder } from '../hooks/useRouteRecorder';
 import { SavedRoute } from '../types/route';
 import { colors } from '../constants/ghostTheme';
@@ -33,7 +34,9 @@ function PhoneFrame({ children }: { children: React.ReactNode }) {
 export default function AppShell() {
   return (
     <AuthProvider>
-      <Shell />
+      <LocationProvider>
+        <Shell />
+      </LocationProvider>
     </AuthProvider>
   );
 }

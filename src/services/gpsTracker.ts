@@ -27,7 +27,19 @@ export class GpsTracker {
     return status === "granted";
   }
 
-  async start(onFix: FixListener, onError: ErrorListener): Promise<void> {
+  /**
+   * Starts a continuous position watch. `options` overrides the default
+   * navigation-grade settings (used by the recorder).
+   */
+  async start(
+    onFix: FixListener,
+    onError: ErrorListener,
+    options: Location.LocationOptions = {
+      accuracy: Location.Accuracy.BestForNavigation,
+      timeInterval: 1000,
+      distanceInterval: 1,
+    }
+  ): Promise<void> {
     if (this.subscription) return; // already tracking
 
     const granted = await this.requestPermission();
@@ -38,11 +50,7 @@ export class GpsTracker {
 
     try {
       this.subscription = await Location.watchPositionAsync(
-        {
-          accuracy: Location.Accuracy.BestForNavigation,
-          timeInterval: 1000, 
-          distanceInterval: 1, 
-        },
+        options,
         (loc) => onFix(toGpsFix(loc))
       );
     } catch (err) {
