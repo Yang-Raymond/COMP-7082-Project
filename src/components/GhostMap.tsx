@@ -70,7 +70,7 @@ export default function GhostMap({
       styleURL={Mapbox.StyleURL.Street}
       scrollEnabled={interactive}
       zoomEnabled={interactive}
-      rotateEnabled={false}
+      rotateEnabled={interactive}
       pitchEnabled={false}
       scaleBarEnabled={false}
     >
@@ -81,10 +81,9 @@ export default function GhostMap({
           // Applied once on mount without animation, so a freshly mounted map opens on the
           // user instead of easing in from Mapbox's default 0,0 camera.
           defaultSettings={{ centerCoordinate: [center.lng, center.lat], zoomLevel: FOLLOW_ZOOM }}
-          centerCoordinate={[center.lng, center.lat]}
           zoomLevel={FOLLOW_ZOOM}
           animationMode="easeTo"
-          animationDuration={300}
+          animationDuration={1000}
         />
       ) : null}
 
