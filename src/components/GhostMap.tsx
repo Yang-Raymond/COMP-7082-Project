@@ -2,6 +2,7 @@
 import { useMemo } from 'react';
 import MapView, { Marker, Polyline } from 'react-native-maps';
 import { StyleSheet, View, Text } from 'react-native';
+import { colors } from '../constants/ghostTheme';
 
 interface LatLng {
   lat: number;
@@ -29,7 +30,7 @@ export default function GhostMap({
   ghostPosition,
   showUser = true,
   fitPath = false,
-  pathColor = '#1a73e8',
+  pathColor = colors.blue,
   interactive = true,
 }: GhostMapProps) {
   const region = useMemo(() => {
@@ -96,19 +97,19 @@ const styles = StyleSheet.create({
     width: 18,
     height: 18,
     borderRadius: 9,
-    backgroundColor: '#1a73e8',
+    backgroundColor: colors.blue,
     borderWidth: 3,
-    borderColor: '#ffffff',
+    borderColor: colors.bg,
   },
   ghost: {
     width: 34,
     height: 34,
     borderRadius: 17,
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.bg,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 2,
-    borderColor: '#6b0f2e',
+    borderColor: colors.primary,
   },
   ghostIcon: { fontSize: 16 },
 });

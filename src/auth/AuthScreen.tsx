@@ -92,7 +92,7 @@ export default function AuthScreen() {
         onPress={submit}
         disabled={busy}
       >
-        {busy ? <ActivityIndicator color="#fff" /> : (
+        {busy ? <ActivityIndicator color={colors.onPrimary} /> : (
           <Text style={s.primaryText}>{isSignIn ? 'Sign in' : 'Sign up'}</Text>
         )}
       </Pressable>
@@ -116,6 +116,6 @@ const s = StyleSheet.create({
   input: { height: 52, borderRadius: 26, borderWidth: 1, borderColor: colors.border, paddingHorizontal: 20, fontSize: 16, color: colors.text },
   error: { color: colors.behind, fontSize: 14 },
   primary: { height: 52, borderRadius: 26, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center', marginTop: 4 },
-  primaryText: { color: '#fff', fontSize: 17, fontWeight: '700' },
+  primaryText: { color: colors.onPrimary, fontSize: 17, fontWeight: '700' },
   switch: { color: colors.primary, fontSize: 14, fontWeight: '600', textAlign: 'center', marginTop: 8 },
 });

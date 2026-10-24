@@ -41,4 +41,12 @@ example
 
 # generated native folders
 /ios
-/android.expo-web-build/
+/android
+
+# Expo web build output
+.expo-web-build/
+
+# AI
+.claude/
+AGENTS.md
+CLAUDE.md

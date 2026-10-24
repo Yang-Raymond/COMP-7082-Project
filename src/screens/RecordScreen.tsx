@@ -94,7 +94,7 @@ export default function RecordScreen({ rec, draft, onDraft, onSaved }: Props) {
                 <Ionicons name={rec.status === 'recording' ? 'pause' : 'play'} size={28} color={colors.primary} />
               </Pressable>
               <Pressable style={s.finish} onPress={finish}>
-                <Ionicons name="stop" size={18} color="#fff" />
+                <Ionicons name="stop" size={18} color={colors.onPrimary} />
                 <Text style={s.finishText}>Finish</Text>
               </Pressable>
             </View>
@@ -118,7 +118,7 @@ const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
   dock: { position: 'absolute', left: 0, right: 0, bottom: 0, alignItems: 'center' },
   panel: { width: '100%', maxWidth: 460, backgroundColor: colors.bg, borderTopLeftRadius: 28, borderTopRightRadius: 28, paddingTop: 76, paddingBottom: 16, alignItems: 'center' },
-  modes: { flexDirection: 'row', backgroundColor: '#f6f3f8', borderRadius: 24, padding: 4, gap: 4 },
+  modes: { flexDirection: 'row', backgroundColor: colors.bg, borderWidth: 1, borderColor: colors.border, borderRadius: 24, padding: 4, gap: 4 },
   mode: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 18, paddingVertical: 9, borderRadius: 20 },
   modeOn: { backgroundColor: colors.lavender },
   modeText: { fontSize: 14, fontWeight: '600', color: colors.text },
@@ -129,5 +129,5 @@ const s = StyleSheet.create({
   controls: { flexDirection: 'row', gap: 14, alignItems: 'center' },
   pause: { width: 68, height: 68, borderRadius: 34, backgroundColor: colors.lavender, alignItems: 'center', justifyContent: 'center' },
   finish: { flex: 1, height: 68, borderRadius: 34, backgroundColor: colors.primary, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
-  finishText: { color: '#fff', fontSize: 24, fontWeight: '700' },
+  finishText: { color: colors.onPrimary, fontSize: 24, fontWeight: '700' },
 });
