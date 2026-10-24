@@ -1,6 +1,6 @@
 
 import { useMemo } from 'react';
-import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from 'react-native-maps';
+import MapView, { Marker, Polyline } from 'react-native-maps';
 import { StyleSheet, View, Text } from 'react-native';
 import { colors } from '../constants/ghostTheme';
 
@@ -52,8 +52,8 @@ export default function GhostMap({
   }, [fitPath, path, latitude, longitude]);
 
   return (
+    // No provider prop: iOS uses Apple Maps (Google Maps on iOS needs a custom build with an API key), Android uses Google Maps.
     <MapView
-      provider={PROVIDER_GOOGLE}
       style={styles.map}
       region={region}
       scrollEnabled={interactive}
