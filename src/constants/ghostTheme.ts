@@ -13,6 +13,7 @@ export const colors = {
   text: '#2a0412',
   muted: '#6b6370',
   border: '#e3e7ff',
+  fieldBg: '#f5f7ff',
   chipActive: '#D4DCFF',
   blue: '#007FFF',
   ahead: '#0f9d75',

@@ -19,3 +19,13 @@ export async function deleteRoute(id: string): Promise<void> {
   const routes = await getRoutes();
   await AsyncStorage.setItem(KEY, JSON.stringify(routes.filter((r) => r.id !== id)));
 }
+
+const ONBOARDED_KEY = 'ghost-racer:onboarded';
+
+export async function hasOnboarded(): Promise<boolean> {
+  return (await AsyncStorage.getItem(ONBOARDED_KEY)) === '1';
+}
+
+export async function markOnboarded(): Promise<void> {
+  await AsyncStorage.setItem(ONBOARDED_KEY, '1');
+}
