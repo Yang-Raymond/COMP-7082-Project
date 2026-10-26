@@ -1,0 +1,14 @@
+diff --git a/node_modules/expo/node_modules/@expo/cli/build/src/start/server/middleware/ExpoGoManifestHandlerMiddleware.js b/node_modules/expo/node_modules/@expo/cli/build/src/start/server/middleware/ExpoGoManifestHandlerMiddleware.js
+index 7d211cb..e40fb59 100644
+--- a/node_modules/expo/node_modules/@expo/cli/build/src/start/server/middleware/ExpoGoManifestHandlerMiddleware.js
++++ b/node_modules/expo/node_modules/@expo/cli/build/src/start/server/middleware/ExpoGoManifestHandlerMiddleware.js
+@@ -118,7 +118,8 @@ class ExpoGoManifestHandlerMiddleware extends _ManifestMiddleware.ManifestMiddle
+             platform,
+             expectSignature: expectSignature ? String(expectSignature) : null,
+             hostname: (0, _url.stripPort)(req.headers['host']),
+-            protocol: req.headers['x-forwarded-proto']
++            // Expo Go over --tunnel sends this header twice ("http, http"); keep only the first value
++            protocol: req.headers['x-forwarded-proto'] ? String(req.headers['x-forwarded-proto']).split(',')[0].trim() : undefined
+         };
+     }
+     getDefaultResponseHeaders() {
