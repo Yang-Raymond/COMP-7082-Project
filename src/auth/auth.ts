@@ -1,9 +1,13 @@
 // Install: npx expo install expo-secure-store
-// .env:    EXPO_PUBLIC_API_URL=http://<your-computer-LAN-IP>:3000   (not localhost; your phone can't reach that)
+// .env:    EXPO_PUBLIC_API_URL=http://<your-computer-LAN-IP>:4000   (not localhost; your phone can't reach that)
+//          or run `npm run tunnel` in server/ to set it to a public URL when the LAN IP doesn't work
 import * as SecureStore from 'expo-secure-store';
 
-const API_URL = process.env.EXPO_PUBLIC_API_URL;
+// Drop a trailing slash so paths don't end up as "//auth/signup"
+const API_URL = process.env.EXPO_PUBLIC_API_URL?.replace(/\/+$/, '');
 const TOKEN_KEY = 'ghostracer_token';
+// Give up instead of spinning forever when the server can't be reached
+const REQUEST_TIMEOUT_MS = 15_000;
 export const isAuthConfigured = Boolean(API_URL);
 export type AuthUser = { id: number; username: string; email: string; points: number };
 export type Session = { token: string; user: AuthUser };
@@ -13,6 +17,8 @@ const notify = (s: Session | null) => listeners.forEach((cb) => cb(s));
 
 async function api<T>(path: string, body?: unknown, token?: string): Promise<T> {
   if (!API_URL) throw new Error('Login is not configured. Add EXPO_PUBLIC_API_URL to your .env file.');
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   try {
     const res = await fetch(`${API_URL}${path}`, {
       method: body ? 'POST' : 'GET',
@@ -21,13 +27,16 @@ async function api<T>(path: string, body?: unknown, token?: string): Promise<T> 
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
       body: body ? JSON.stringify(body) : undefined,
+      signal: controller.signal,
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(data.error ?? `Request failed (${res.status})`);
     return data as T;
   } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
+    const msg = controller.signal.aborted ? 'Request timed out' : e instanceof Error ? e.message : String(e);
     throw new Error(`${msg} [${API_URL}${path}]`);
+  } finally {
+    clearTimeout(timer);
   }
 }
 
@@ -79,8 +88,8 @@ export function friendlyAuthError(e: unknown): string {
   const m = msg.toLowerCase();
   if (m.includes('invalid login credentials')) return 'Wrong email or password.';
   if (m.includes('already registered')) return 'An account with this email or username already exists. Try signing in.';
-  if (m.includes('network request failed') || m.includes('failed to fetch'))
-    return "Can't reach the server. Check your connection.";
+  if (m.includes('network request failed') || m.includes('failed to fetch') || m.includes('timed out'))
+    return `Can't reach the server${API_URL ? ` at ${API_URL}` : ''}. Check that it's running and your phone can reach it.`;
   if (m.includes('password should be')) return 'Password is too weak. Use at least 6 characters.';
   return msg;
 }
