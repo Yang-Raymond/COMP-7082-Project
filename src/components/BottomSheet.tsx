@@ -1,4 +1,6 @@
-
+// Bottom sheet component that can be dragged up and down to reveal more content. 
+// Sheet has 3 positions: collapsed, half, and expanded.
+// The sheet has an optional accessory that can follow the sheet up to a certain point. 
 import { Ionicons } from '@expo/vector-icons';
 import React, { useEffect, useRef, useState } from 'react';
 import { Animated, PanResponder, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
@@ -8,11 +10,23 @@ type Snap = 'collapsed' | 'half' | 'expanded';
 
 const HEADER = 84;
 const COLLAPSED_VISIBLE = 96;
+const ACCESSORY_GAP = 16;
 const native = Platform.OS !== 'web';
 const ORDER: Snap[] = ['collapsed', 'half', 'expanded'];
 
-export default function BottomSheet({ title, children }: { title: string; children: React.ReactNode }) {
-  const [H, setH] = useState(0); 
+/**
+ * Accessory pinned above the sheet's top-right edge.
+ * It rides up with the sheet from collapsed to half, then stays put while the sheet
+ * expands further and covers it.
+ */
+interface BottomSheetProps {
+  title: string;
+  children: React.ReactNode;
+  accessory?: React.ReactNode;
+}
+
+export default function BottomSheet({ title, children, accessory }: BottomSheetProps) {
+  const [H, setH] = useState(0);
   const [snap, setSnap] = useState<Snap>('half');
   const snapRef = useRef<Snap>('half');
   const ty = useRef(new Animated.Value(0)).current;
@@ -25,12 +39,12 @@ export default function BottomSheet({ title, children }: { title: string; childr
     expanded: expandedH,
   };
 
-  
   const dims = useRef({ expandedH, visible });
   dims.current = { expandedH, visible };
   const y = (s: Snap) => dims.current.expandedH - dims.current.visible[s];
   const clampY = (v: number) => Math.min(Math.max(v, y('expanded')), y('collapsed'));
 
+  // Bottom sheet animation and snap positioning. The sheet is always positioned at the bottom of the container, and its translateY is clamped between the three snap positions.
   const snapTo = (s: Snap) => {
     snapRef.current = s;
     setSnap(s);
@@ -40,7 +54,6 @@ export default function BottomSheet({ title, children }: { title: string; childr
   // Place the sheet once we know the container size (and again if it resizes)
   useEffect(() => {
     if (H > 0) ty.setValue(y(snapRef.current));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [H]);
 
   const pan = useRef(
@@ -54,12 +67,8 @@ export default function BottomSheet({ title, children }: { title: string; childr
       },
       onPanResponderMove: (_, g) => ty.setValue(clampY(startY.current + g.dy)),
       onPanResponderRelease: (_, g) => {
-        // A tap (barely moved) steps to the next position
-        if (Math.abs(g.dx) < 5 && Math.abs(g.dy) < 5) {
-          snapTo(ORDER[(ORDER.indexOf(snapRef.current) + 1) % ORDER.length]);
-          return;
-        }
-        // A drag settles on the nearest position, nudged by flick speed
+
+        // A drag settles on the nearest position, flick speed adjusts the target position in the drag direction.
         const projected = clampY(startY.current + g.dy) + g.vy * 150;
         const best = ORDER.reduce((a, b) => (Math.abs(y(a) - projected) < Math.abs(y(b) - projected) ? a : b));
         snapTo(best);
@@ -67,12 +76,28 @@ export default function BottomSheet({ title, children }: { title: string; childr
     })
   ).current;
 
+  // Accessory follows the sheet from collapsed to half. Hides when the sheet expands further and covers it.
+  const halfY = expandedH - visible.half;
+  const collapsedY = expandedH - visible.collapsed;
+  const accessoryY =
+    collapsedY > halfY
+      ? ty.interpolate({ inputRange: [halfY, collapsedY], outputRange: [halfY, collapsedY], extrapolate: 'clamp' })
+      : collapsedY;
+
   return (
     <View
       style={StyleSheet.absoluteFill}
-      pointerEvents="box-none"   
+      pointerEvents="box-none"
       onLayout={(e) => setH(e.nativeEvent.layout.height)}
     >
+      {H > 0 && accessory && (
+        <Animated.View
+          pointerEvents="box-none"
+          style={[s.accessory, { bottom: expandedH + ACCESSORY_GAP, transform: [{ translateY: accessoryY }] }]}
+        >
+          {accessory}
+        </Animated.View>
+      )}
       {H > 0 && (
         <Animated.View style={[s.sheet, shadow, { height: expandedH, transform: [{ translateY: ty }] }]}>
           <View {...pan.panHandlers} style={s.header}>
@@ -97,6 +122,7 @@ export default function BottomSheet({ title, children }: { title: string; childr
 const noSelect = Platform.OS === 'web' ? ({ userSelect: 'none', cursor: 'grab' } as object) : {};
 
 const s = StyleSheet.create({
+  accessory: { position: 'absolute', right: 16 },
   sheet: { position: 'absolute', left: 0, right: 0, bottom: 0, backgroundColor: colors.bg, borderTopLeftRadius: 28, borderTopRightRadius: 28 },
   header: { height: HEADER, paddingHorizontal: 20, paddingTop: 10, ...noSelect },
   handle: { alignSelf: 'center', width: 56, height: 5, borderRadius: 3, backgroundColor: colors.primary, marginBottom: 14 },

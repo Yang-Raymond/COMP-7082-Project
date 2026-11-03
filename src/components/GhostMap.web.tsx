@@ -1,12 +1,18 @@
-// Web placeholder for GhostMap. The app targets iOS/Android only; web is used
-// for quick UI checks. This file keeps Metro from bundling the native Mapbox SDK
-// on web and shows a simple box with the current coordinates instead.
+// Web placeholder for GhostMap. 
+// Delete later.
+// Map not available on web.
+// Used for quick testing purpose. 
+import { useImperativeHandle } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { colors } from '../constants/ghostTheme';
 import type { GhostMapProps } from '../types/map';
 
-/** Renders a themed placeholder with the center coordinates; map props are otherwise ignored. */
-export default function GhostMap({ center }: GhostMapProps) {
+/**
+ * Renders a themed placeholder with the center coordinates; map props are otherwise ignored.
+ * Exposes the same `ref` handle as the native map, with `recenter` as a no-op.
+ */
+export default function GhostMap({ center, ref }: GhostMapProps) {
+  useImperativeHandle(ref, () => ({ recenter: () => {} }), []);
   return (
     <View style={styles.box}>
       <Text style={styles.title}>Map available on iOS/Android</Text>

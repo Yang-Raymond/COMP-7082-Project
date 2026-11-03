@@ -1,8 +1,7 @@
 // Native (iOS/Android) map built on the Mapbox Maps SDK via @rnmapbox/maps.
-// Draws the route path, the user's location dot and the ghost marker, and
-// either follows the user or fits the camera to the whole route.
-// Requires a development build (not Expo Go) and EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN.
-import { useMemo } from 'react';
+// Draws the route path, the user's location dot and the ghost marker, and either follows the user or fits the camera to the whole route.
+// Requires a EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN.
+import { useImperativeHandle, useMemo, useRef } from 'react';
 import { StyleSheet, View, Text } from 'react-native';
 import Mapbox from '@rnmapbox/maps';
 import type { Feature, LineString } from 'geojson';
@@ -36,7 +35,27 @@ export default function GhostMap({
   fitPath = false,
   pathColor = colors.blue,
   interactive = true,
+  ref,
 }: GhostMapProps) {
+  const cameraRef = useRef<Mapbox.Camera>(null);
+
+  // Snaps the camera back onto the user after panning away.
+  useImperativeHandle(
+    ref,
+    () => ({
+      recenter: () => {
+        if (!center) return;
+        cameraRef.current?.setCamera({
+          centerCoordinate: [center.lng, center.lat],
+          zoomLevel: FOLLOW_ZOOM,
+          animationMode: 'easeTo',
+          animationDuration: 600,
+        });
+      },
+    }),
+    [center],
+  );
+
   const hasPath = !!path && path.length > 1;
 
   // GeoJSON line for the route; memoized so the native source only updates when the path changes.
@@ -78,8 +97,8 @@ export default function GhostMap({
         <Mapbox.Camera bounds={bounds} animationDuration={0} />
       ) : center ? (
         <Mapbox.Camera
-          // Applied once on mount without animation, so a freshly mounted map opens on the
-          // user instead of easing in from Mapbox's default 0,0 camera.
+          ref={cameraRef}
+          // Applied once on mount without animation, so a freshly mounted map opens on the user instead of easing in from Mapbox's default 0,0 camera.
           defaultSettings={{ centerCoordinate: [center.lng, center.lat], zoomLevel: FOLLOW_ZOOM }}
           zoomLevel={FOLLOW_ZOOM}
           animationMode="easeTo"

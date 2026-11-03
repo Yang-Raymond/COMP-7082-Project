@@ -1,9 +1,12 @@
 
-import React, { useEffect, useMemo, useState } from 'react';
+//Home screen with a map search bar with common filters, a list of nearby challenges.
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, TextInput, Pressable, ScrollView, Platform, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import GhostMap from '../components/GhostMap';
+import LocationButton from '../components/LocationButton';
+import type { GhostMapHandle } from '../types/map';
 import BottomSheet from '../components/BottomSheet';
 import { useAuthContext } from '../auth';
 import { useCurrentPosition } from '../hooks/useCurrentPosition';
@@ -17,6 +20,7 @@ type IconName = React.ComponentProps<typeof Ionicons>['name'];
 
 export default function HomeScreen({ onRace }: { onRace: (r: SavedRoute) => void }) {
   const insets = useSafeAreaInsets();
+  const mapRef = useRef<GhostMapHandle>(null);
   const { canChallenge } = useAuthContext();
   const [routes, setRoutes] = useState<SavedRoute[]>([]);
   const [query, setQuery] = useState('');
@@ -50,6 +54,10 @@ export default function HomeScreen({ onRace }: { onRace: (r: SavedRoute) => void
     </Pressable>
   );
 
+  /**
+   * Search bar and filter buttons. 
+   * The search bar filters by route name, and the filter buttons filter by activity type and public/private status.
+   */
   const searchUI = (
     <>
       <View style={[s.search, shadow]}>
@@ -70,6 +78,10 @@ export default function HomeScreen({ onRace }: { onRace: (r: SavedRoute) => void
     </>
   );
 
+  /**
+   * Route cards.
+   * Each route card shows the route name, activity type, time to beat, distance. 
+   */
   const cardsUI = (
     <>
       {visible.length === 0 && (
@@ -117,13 +129,16 @@ export default function HomeScreen({ onRace }: { onRace: (r: SavedRoute) => void
     </>
   );
 
-  const map = <GhostMap center={position} showUser={isLive} />;
+  /**
+   * Map using Mapbox.
+   */
+  const map = <GhostMap ref={mapRef} center={position} showUser={isLive} />;
 
   return (
     <View style={s.root}>
       <View style={StyleSheet.absoluteFill}>{map}</View>
       <View style={[s.top, { paddingTop: insets.top + 10 }]}>{searchUI}</View>
-      <BottomSheet title="Challenges Nearby">{cardsUI}</BottomSheet>
+      <BottomSheet title="Challenges Nearby" accessory={<LocationButton mapRef={mapRef} />}>{cardsUI}</BottomSheet>
     </View>
   );
 }
