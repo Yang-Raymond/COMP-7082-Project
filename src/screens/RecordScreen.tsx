@@ -1,20 +1,22 @@
-import React, { useEffect, useRef, useState } from 'react';
+// Record screen. Shows a map with the user's path, and a panel with stats and pause and end controls.
+import React, { useRef } from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import GhostMap from '../components/GhostMap';
 import StartButton from '../components/StartButton';
+import LocationButton from '../components/LocationButton';
 import { useAuthContext } from '../auth';
 import RecordDoneScreen from './RecordDoneScreen';
-import { GpsTracker } from '../services/gpsTracker';
+import { useCurrentPosition } from '../hooks/useCurrentPosition';
 import { RouteDraft, saveDraft, useRouteRecorder } from '../hooks/useRouteRecorder';
 import { formatClock, formatKm } from '../services/format';
 import { colors, shadow } from '../constants/ghostTheme';
 import { ActivityType } from '../types/route';
+import type { GhostMapHandle } from '../types/map';
 
-const FALLBACK = { lat: 49.2494, lng: -122.9987 };
 
+/** Recorder state lives in AppShell so a run survives tab switches. */
 interface Props {
-  /** Recorder state lives in AppShell so a run survives tab switches. */
   rec: ReturnType<typeof useRouteRecorder>;
   draft: RouteDraft | null;
   onDraft: (d: RouteDraft | null) => void;
@@ -23,19 +25,12 @@ interface Props {
 
 export default function RecordScreen({ rec, draft, onDraft, onSaved }: Props) {
   const { requireAuth } = useAuthContext();
-  const [pos, setPos] = useState(FALLBACK);
-  const tracker = useRef(new GpsTracker());
-
-  // Center the map on the user before recording starts
-  useEffect(() => {
-    tracker.current.getCurrent().then((fix) => {
-      if (fix) setPos({ lat: fix.lat, lng: fix.lng });
-    });
-  }, []);
+  const { position, isLive } = useCurrentPosition();
+  const mapRef = useRef<GhostMapHandle>(null);
 
   const recording = rec.status !== 'idle';
   const last = rec.points[rec.points.length - 1];
-  const center = last ? { lat: last.lat, lng: last.lng } : pos;
+  const center = last ? { lat: last.lat, lng: last.lng } : position;
 
   const finish = () => onDraft(rec.finish());
 
@@ -48,11 +43,11 @@ export default function RecordScreen({ rec, draft, onDraft, onSaved }: Props) {
 
   if (draft) {
     return <RecordDoneScreen
-        draft={draft}
-        onSave={save}
-        onSaveAndChallenge={(name) => requireAuth('Sign in to challenge your friends.', () => save(name))}
-        onDiscard={() => onDraft(null)}
-      />;
+      draft={draft}
+      onSave={save}
+      onSaveAndChallenge={(name) => requireAuth('Sign in to challenge your friends.', () => save(name))}
+      onDiscard={() => onDraft(null)}
+    />;
   }
 
   const Mode = ({ type, label, icon }: { type: ActivityType; label: string; icon: 'walk' | 'bicycle' }) => (
@@ -66,14 +61,17 @@ export default function RecordScreen({ rec, draft, onDraft, onSaved }: Props) {
     <View style={s.root}>
       <View style={StyleSheet.absoluteFill}>
         <GhostMap
-          latitude={center.lat}
-          longitude={center.lng}
+          ref={mapRef}
+          center={center}
+          showUser={isLive || recording}
           path={rec.points.map((p) => ({ lat: p.lat, lng: p.lng }))}
         />
       </View>
 
-      {/* Full-width dock; the card inside is capped so it never stretches on wide screens */}
       <View style={[s.dock, { pointerEvents: 'box-none' } as object]}>
+        <View style={[s.locateRow, { pointerEvents: 'box-none' } as object]}>
+          <LocationButton mapRef={mapRef} />
+        </View>
         {!recording ? (
           <View style={[s.panel, shadow]}>
             <StartButton onPress={rec.start} />
@@ -117,6 +115,7 @@ function Stat({ value, label }: { value: string; label: string }) {
 const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
   dock: { position: 'absolute', left: 0, right: 0, bottom: 0, alignItems: 'center' },
+  locateRow: { width: '100%', maxWidth: 460, alignItems: 'flex-end', paddingHorizontal: 16, marginBottom: 16 },
   panel: { width: '100%', maxWidth: 460, backgroundColor: colors.bg, borderTopLeftRadius: 28, borderTopRightRadius: 28, paddingTop: 76, paddingBottom: 16, alignItems: 'center' },
   modes: { flexDirection: 'row', backgroundColor: colors.bg, borderWidth: 1, borderColor: colors.border, borderRadius: 24, padding: 4, gap: 4 },
   mode: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 18, paddingVertical: 9, borderRadius: 20 },

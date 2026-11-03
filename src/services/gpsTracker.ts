@@ -1,5 +1,6 @@
-
+// Wraps expo-location: permission, location-services checks, and position watches normalized to GpsFix.
 import * as Location from "expo-location";
+import { Platform } from "react-native";
 import { GpsFix } from "../types/gps";
 
 export type FixListener = (fix: GpsFix) => void;
@@ -18,17 +19,32 @@ function toGpsFix(loc: Location.LocationObject): GpsFix {
   };
 }
 
+// Shared across all trackers so the Android "turn on location" dialog shows at most once per launch if location isn't on.
+let servicesPromptShown = false;
+
 export class GpsTracker {
   private subscription: Location.LocationSubscription | null = null;
 
-  
+  /** Requests (or confirms) foreground location permission. */
   async requestPermission(): Promise<boolean> {
     const { status } = await Location.requestForegroundPermissionsAsync();
     return status === "granted";
   }
 
-  async start(onFix: FixListener, onError: ErrorListener): Promise<void> {
-    if (this.subscription) return; // already tracking
+  /**
+   * Starts a continuous position watch. `options` overrides the default
+   * navigation-grade settings (used by the recorder).
+   */
+  async start(
+    onFix: FixListener,
+    onError: ErrorListener,
+    options: Location.LocationOptions = {
+      accuracy: Location.Accuracy.BestForNavigation,
+      timeInterval: 1000,
+      distanceInterval: 1,
+    }
+  ): Promise<void> {
+    if (this.subscription) return;
 
     const granted = await this.requestPermission();
     if (!granted) {
@@ -36,13 +52,14 @@ export class GpsTracker {
       return;
     }
 
+    if (!(await this.ensureServicesEnabled())) {
+      onError("Location services are off");
+      return;
+    }
+
     try {
       this.subscription = await Location.watchPositionAsync(
-        {
-          accuracy: Location.Accuracy.BestForNavigation,
-          timeInterval: 1000, 
-          distanceInterval: 1, 
-        },
+        options,
         (loc) => onFix(toGpsFix(loc))
       );
     } catch (err) {
@@ -50,15 +67,36 @@ export class GpsTracker {
     }
   }
 
-  
-  async getCurrent(): Promise<GpsFix | null> {
-    const granted = await this.requestPermission();
-    if (!granted) return null;
+  /**
+   * Resolves true when device location services are on. If they are off, shows the
+   * Android system "turn on location" dialog the first time only.
+   * Later calls just re-check without prompting. Never prompts on iOS/web.
+   * Pass `force` for a user-initiated request, such as the locate button, to prompt
+   * even if the dialog was already shown.
+   */
+  async ensureServicesEnabled(force = false): Promise<boolean> {
     try {
-      const loc = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.Balanced,
-      });
-      return toGpsFix(loc);
+      if (await Location.hasServicesEnabledAsync()) return true;
+      if (Platform.OS !== "android" || (servicesPromptShown && !force)) return false;
+      servicesPromptShown = true;
+      await Location.enableNetworkProviderAsync();
+      return await Location.hasServicesEnabledAsync();
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Returns the OS's cached last-known position without spinning up GPS.
+   * Only checks (never requests) permission so it can't trigger a second prompt
+   * Resolves null when unavailable.
+   */
+  async getLastKnown(): Promise<GpsFix | null> {
+    try {
+      const { status } = await Location.getForegroundPermissionsAsync();
+      if (status !== "granted") return null;
+      const loc = await Location.getLastKnownPositionAsync();
+      return loc ? toGpsFix(loc) : null;
     } catch {
       return null;
     }

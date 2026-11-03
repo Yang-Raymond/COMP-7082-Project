@@ -1,93 +1,138 @@
-
-import { useMemo } from 'react';
-import MapView, { Marker, Polyline } from 'react-native-maps';
+// Native (iOS/Android) map built on the Mapbox Maps SDK via @rnmapbox/maps.
+// Draws the route path, the user's location dot and the ghost marker, and either follows the user or fits the camera to the whole route.
+// Requires a EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN.
+import { useImperativeHandle, useMemo, useRef } from 'react';
 import { StyleSheet, View, Text } from 'react-native';
+import Mapbox from '@rnmapbox/maps';
+import type { Feature, LineString } from 'geojson';
 import { colors } from '../constants/ghostTheme';
+import type { GhostMapProps } from '../types/map';
 
-interface LatLng {
-  lat: number;
-  lng: number;
+const MAPBOX_ACCESS_TOKEN = process.env.EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN;
+
+if (MAPBOX_ACCESS_TOKEN) {
+  Mapbox.setAccessToken(MAPBOX_ACCESS_TOKEN);
+} else {
+  console.warn('EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN is not set — map tiles will not load.');
 }
 
-export interface GhostMapProps {
-  latitude: number;
-  longitude: number;
-  path?: LatLng[];
-  ghostPosition?: LatLng;
- 
-  showUser?: boolean;
-  
-  fitPath?: boolean;
-  pathColor?: string;
-  
-  interactive?: boolean;
-}
+const FOLLOW_ZOOM = 16;
+const FIT_PADDING = 24;
 
+/**
+ * Renders the Mapbox map. Coordinates are converted to Mapbox's
+ * [longitude, latitude] order. When `fitPath` is set and the path has at least
+ * two points, the camera is bounded to the path's extent; otherwise it centers
+ * on `center`. With no center yet, the camera is left at Mapbox's default view
+ * and no user dot is drawn. The first center is applied instantly via
+ * `defaultSettings`; later center changes ease.
+ */
 export default function GhostMap({
-  latitude,
-  longitude,
+  center,
   path,
   ghostPosition,
   showUser = true,
   fitPath = false,
   pathColor = colors.blue,
   interactive = true,
+  ref,
 }: GhostMapProps) {
-  const region = useMemo(() => {
-    if (fitPath && path && path.length > 1) {
-      const lats = path.map((p) => p.lat);
-      const lngs = path.map((p) => p.lng);
-      const minLat = Math.min(...lats);
-      const maxLat = Math.max(...lats);
-      const minLng = Math.min(...lngs);
-      const maxLng = Math.max(...lngs);
-      return {
-        latitude: (minLat + maxLat) / 2,
-        longitude: (minLng + maxLng) / 2,
-        latitudeDelta: Math.max((maxLat - minLat) * 1.5, 0.002),
-        longitudeDelta: Math.max((maxLng - minLng) * 1.5, 0.002),
-      };
-    }
-    return { latitude, longitude, latitudeDelta: 0.006, longitudeDelta: 0.006 };
-  }, [fitPath, path, latitude, longitude]);
+  const cameraRef = useRef<Mapbox.Camera>(null);
+
+  // Snaps the camera back onto the user after panning away.
+  useImperativeHandle(
+    ref,
+    () => ({
+      recenter: () => {
+        if (!center) return;
+        cameraRef.current?.setCamera({
+          centerCoordinate: [center.lng, center.lat],
+          zoomLevel: FOLLOW_ZOOM,
+          animationMode: 'easeTo',
+          animationDuration: 600,
+        });
+      },
+    }),
+    [center],
+  );
+
+  const hasPath = !!path && path.length > 1;
+
+  // GeoJSON line for the route; memoized so the native source only updates when the path changes.
+  const pathShape = useMemo<Feature<LineString> | null>(() => {
+    if (!hasPath) return null;
+    return {
+      type: 'Feature',
+      properties: {},
+      geometry: { type: 'LineString', coordinates: path!.map((p) => [p.lng, p.lat]) },
+    };
+  }, [hasPath, path]);
+
+  // Bounding box of the path, used when the camera should show the whole route.
+  const bounds = useMemo(() => {
+    if (!fitPath || !hasPath) return undefined;
+    const lats = path!.map((p) => p.lat);
+    const lngs = path!.map((p) => p.lng);
+    return {
+      ne: [Math.max(...lngs), Math.max(...lats)],
+      sw: [Math.min(...lngs), Math.min(...lats)],
+      paddingTop: FIT_PADDING,
+      paddingBottom: FIT_PADDING,
+      paddingLeft: FIT_PADDING,
+      paddingRight: FIT_PADDING,
+    };
+  }, [fitPath, hasPath, path]);
 
   return (
-    // No provider prop: iOS uses Apple Maps (Google Maps on iOS needs a custom build with an API key), Android uses Google Maps.
-    <MapView
+    <Mapbox.MapView
       style={styles.map}
-      region={region}
+      styleURL={Mapbox.StyleURL.Street}
       scrollEnabled={interactive}
       zoomEnabled={interactive}
-      rotateEnabled={false}
+      rotateEnabled={interactive}
       pitchEnabled={false}
-      toolbarEnabled={false}
-      showsMyLocationButton={false}
+      scaleBarEnabled={false}
     >
-      {path && path.length > 1 && (
-        <Polyline
-          coordinates={path.map((p) => ({ latitude: p.lat, longitude: p.lng }))}
-          strokeColor={pathColor}
-          strokeWidth={4}
+      {bounds ? (
+        <Mapbox.Camera bounds={bounds} animationDuration={0} />
+      ) : center ? (
+        <Mapbox.Camera
+          ref={cameraRef}
+          // Applied once on mount without animation, so a freshly mounted map opens on the user instead of easing in from Mapbox's default 0,0 camera.
+          defaultSettings={{ centerCoordinate: [center.lng, center.lat], zoomLevel: FOLLOW_ZOOM }}
+          zoomLevel={FOLLOW_ZOOM}
+          animationMode="easeTo"
+          animationDuration={1000}
         />
+      ) : null}
+
+      {pathShape && (
+        <Mapbox.ShapeSource id="ghost-path" shape={pathShape}>
+          <Mapbox.LineLayer
+            id="ghost-path-line"
+            style={{ lineColor: pathColor, lineWidth: 4, lineCap: 'round', lineJoin: 'round' }}
+          />
+        </Mapbox.ShapeSource>
       )}
 
       {ghostPosition && (
-        <Marker
-          coordinate={{ latitude: ghostPosition.lat, longitude: ghostPosition.lng }}
+        <Mapbox.MarkerView
+          coordinate={[ghostPosition.lng, ghostPosition.lat]}
           anchor={{ x: 0.5, y: 0.5 }}
+          allowOverlap
         >
           <View style={styles.ghost}>
             <Text style={styles.ghostIcon}>👻</Text>
           </View>
-        </Marker>
+        </Mapbox.MarkerView>
       )}
 
-      {showUser && (
-        <Marker coordinate={{ latitude, longitude }} anchor={{ x: 0.5, y: 0.5 }}>
+      {showUser && center && (
+        <Mapbox.MarkerView coordinate={[center.lng, center.lat]} anchor={{ x: 0.5, y: 0.5 }} allowOverlap>
           <View style={styles.userDot} />
-        </Marker>
+        </Mapbox.MarkerView>
       )}
-    </MapView>
+    </Mapbox.MapView>
   );
 }
 

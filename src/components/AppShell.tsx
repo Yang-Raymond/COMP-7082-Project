@@ -8,6 +8,7 @@ import PlaceholderScreen from '../screens/PlaceholderScreen';
 import YouScreen from '../screens/YouScreen';
 import OnboardingScreen from '../screens/OnboardingScreen';
 import { AuthProvider, SignInPrompt, useAuthContext } from '../auth';
+import { LocationProvider } from '../hooks/useCurrentPosition';
 import { RouteDraft, useRouteRecorder } from '../hooks/useRouteRecorder';
 import { hasOnboarded, markOnboarded } from '../services/storage';
 import { SavedRoute } from '../types/route';
@@ -35,7 +36,9 @@ function PhoneFrame({ children }: { children: React.ReactNode }) {
 export default function AppShell() {
   return (
     <AuthProvider>
-      <Shell />
+      <LocationProvider>
+        <Shell />
+      </LocationProvider>
     </AuthProvider>
   );
 }

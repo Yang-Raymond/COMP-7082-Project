@@ -1,8 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import GhostMap from '../components/GhostMap';
 import { colors, shadow } from '../constants/ghostTheme';
+import { useCurrentPosition } from '../hooks/useCurrentPosition';
 import { useRouteRecorder } from '../hooks/useRouteRecorder';
 import { SavedRoute } from '../types/route';
 
@@ -12,15 +12,14 @@ interface Props {
   onExit: () => void;
 }
 
-const FALLBACK = { lat: 49.2494, lng: -122.9987 };
 
 export default function RaceScreen({ route, rec, onExit }: Props) {
-  const [pos, setPos] = useState(FALLBACK);
+  const { position, isLive } = useCurrentPosition();
 
   // Safely check status and points to prevent undefined crashes
   const recording = rec?.status !== 'idle';
   const last = rec?.points?.[rec.points.length - 1];
-  const center = last ? { lat: last.lat, lng: last.lng } : pos;
+  const center = last ? { lat: last.lat, lng: last.lng } : position;
 
   
   const finish = () => {
@@ -32,8 +31,8 @@ export default function RaceScreen({ route, rec, onExit }: Props) {
     <View style={s.root}>
       <View style={StyleSheet.absoluteFill}>
         <GhostMap
-          latitude={center.lat}
-          longitude={center.lng}
+          center={center}
+          showUser={isLive || recording}
           path={rec?.points?.map((p) => ({ lat: p.lat, lng: p.lng })) || []}
         />
       </View>
