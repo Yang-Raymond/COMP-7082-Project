@@ -2,7 +2,7 @@ import React from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { colors } from '../constants/ghostTheme';
+import { colors, shadow } from '../constants/ghostTheme';
 
 export type Tab = 'home' | 'record' | 'social' | 'you';
 type IconName = React.ComponentProps<typeof Ionicons>['name'];
@@ -17,7 +17,8 @@ const TABS: { key: Tab; label: string; icon: IconName; active: IconName }[] = [
 export default function TabBar({ tab, onChange }: { tab: Tab; onChange: (t: Tab) => void }) {
   const insets = useSafeAreaInsets();
   return (
-    <View style={[styles.bar, { paddingBottom: Math.max(insets.bottom, 8) }]}>
+    // A floating pill that sits under the screen rather than over it, so it never covers content
+    <View style={[styles.bar, shadow, { marginBottom: Math.max(insets.bottom, 8) }]}>
       {TABS.map((t) => {
         const active = t.key === tab;
         return (
@@ -40,10 +41,15 @@ export default function TabBar({ tab, onChange }: { tab: Tab; onChange: (t: Tab)
 const styles = StyleSheet.create({
   bar: {
     flexDirection: 'row',
+    alignSelf: 'center',
+    width: '76%',
+    maxWidth: 320,
     backgroundColor: colors.bg,
-    borderTopWidth: 1,
+    borderRadius: 32,
+    borderWidth: 1,
     borderColor: colors.border,
-    paddingTop: 8,
+    paddingVertical: 8,
+    marginTop: 6,
   },
   item: { flex: 1, alignItems: 'center', gap: 2 },
   label: { fontSize: 11, color: colors.muted },

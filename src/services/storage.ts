@@ -32,3 +32,12 @@ export async function getLastLocation(): Promise<LatLng | null> {
 export async function saveLastLocation(pos: LatLng): Promise<void> {
   await AsyncStorage.setItem(LAST_LOCATION_KEY, JSON.stringify({ lat: pos.lat, lng: pos.lng }));
 }
+const ONBOARDED_KEY = 'ghost-racer:onboarded';
+
+export async function hasOnboarded(): Promise<boolean> {
+  return (await AsyncStorage.getItem(ONBOARDED_KEY)) === '1';
+}
+
+export async function markOnboarded(): Promise<void> {
+  await AsyncStorage.setItem(ONBOARDED_KEY, '1');
+}

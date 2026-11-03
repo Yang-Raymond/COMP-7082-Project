@@ -43,6 +43,9 @@ example
 /ios
 /android
 
+# Expo web build output
+.expo-web-build/
+
 # AI
 .claude/
 AGENTS.md

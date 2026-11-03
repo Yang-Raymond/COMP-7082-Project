@@ -35,6 +35,7 @@
         }
       ],
       "@rnmapbox/maps"
+      "expo-secure-store"
     ],
     "experiments": {
       "typedRoutes": true,

@@ -39,3 +39,12 @@ export async function saveLastLocation(pos: LatLng): Promise<void> {
     // Best effort: losing the cached location only affects the next startup view.
   }
 }
+const ONBOARDED_KEY = 'ghost-racer:onboarded';
+
+export async function hasOnboarded(): Promise<boolean> {
+  return window.localStorage.getItem(ONBOARDED_KEY) === '1';
+}
+
+export async function markOnboarded(): Promise<void> {
+  window.localStorage.setItem(ONBOARDED_KEY, '1');
+}
