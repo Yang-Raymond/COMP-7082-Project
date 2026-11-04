@@ -1,7 +1,6 @@
-
-//Home screen with a map search bar with common filters, a list of nearby challenges.
+// Home screen: map with a search bar and activity filters, plus a bottom sheet listing nearby challenges.
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { View, Text, TextInput, Pressable, ScrollView, Platform, StyleSheet } from 'react-native';
+import { View, Text, TextInput, Pressable, Platform, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import GhostMap from '../components/GhostMap';
@@ -20,6 +19,20 @@ import { ActivityType, SavedRoute } from '../types/route';
 
 type IconName = React.ComponentProps<typeof Ionicons>['name'];
 
+/** Toggleable filter chip shown under the search bar. */
+function Chip({ label, icon, on, onPress }: { label: string; icon: IconName; on: boolean; onPress: () => void }) {
+  return (
+    <Pressable onPress={onPress} style={[s.chip, on && s.chipOn]}>
+      <Ionicons name={icon} size={14} color={colors.primary} />
+      <Text style={s.chipText}>{label}</Text>
+    </Pressable>
+  );
+}
+
+/**
+ * Loads saved routes, filters them by search text and activity, and renders them
+ * as race-able cards over a live map centered on the shared current position.
+ */
 export default function HomeScreen({ onRace }: { onRace: (r: SavedRoute) => void }) {
   const insets = useSafeAreaInsets();
   const mapRef = useRef<GhostMapHandle>(null);
@@ -48,13 +61,6 @@ export default function HomeScreen({ onRace }: { onRace: (r: SavedRoute) => void
     await deleteRoute(id);
     setRoutes(await getRoutes());
   };
-
-  const Chip = ({ label, icon, on, onPress }: { label: string; icon: IconName; on: boolean; onPress: () => void }) => (
-    <Pressable onPress={onPress} style={[s.chip, on && s.chipOn]}>
-      <Ionicons name={icon} size={14} color={colors.primary} />
-      <Text style={s.chipText}>{label}</Text>
-    </Pressable>
-  );
 
   /**
    * Search bar and filter buttons. 
@@ -95,7 +101,8 @@ export default function HomeScreen({ onRace }: { onRace: (r: SavedRoute) => void
       )}
       {visible.map((r) => {
         const start = r.points[0];
-        const away = here && start ? formatDistance(haversineDistance(here, start)) : null;
+        // Only measure from a live fix, never from a stale stored location.
+        const away = isLive && position && start ? formatDistance(haversineDistance(position, start)) : null;
         return (
           <Pressable key={r.id} style={s.card} onPress={() => onRace(r)}>
             <View style={s.cardHead}>

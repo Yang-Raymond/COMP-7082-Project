@@ -11,7 +11,6 @@ import { useCurrentPosition } from '../hooks/useCurrentPosition';
 import { RouteDraft, saveDraft, useRouteRecorder } from '../hooks/useRouteRecorder';
 import { formatClock, formatKm } from '../services/format';
 import { colors, shadow } from '../constants/ghostTheme';
-import { ActivityType } from '../types/route';
 import type { GhostMapHandle } from '../types/map';
 
 
@@ -23,6 +22,10 @@ interface Props {
   onSaved: () => void;
 }
 
+/**
+ * Pre-recording: map plus Start button and Run/Bike toggle. While recording: live
+ * stats with pause/resume and finish. After finishing: the RecordDoneScreen for the draft.
+ */
 export default function RecordScreen({ rec, draft, onDraft, onSaved }: Props) {
   const { requireAuth } = useAuthContext();
   const { position, isLive } = useCurrentPosition();
@@ -50,13 +53,6 @@ export default function RecordScreen({ rec, draft, onDraft, onSaved }: Props) {
     />;
   }
 
-  const Mode = ({ type, label, icon }: { type: ActivityType; label: string; icon: 'walk' | 'bicycle' }) => (
-    <Pressable style={[s.mode, rec.activity === type && s.modeOn]} onPress={() => rec.setActivity(type)}>
-      <Ionicons name={icon} size={16} color={colors.primary} />
-      <Text style={s.modeText}>{label}</Text>
-    </Pressable>
-  );
-
   return (
     <View style={s.root}>
       <View style={StyleSheet.absoluteFill}>
@@ -76,8 +72,8 @@ export default function RecordScreen({ rec, draft, onDraft, onSaved }: Props) {
           <View style={[s.panel, shadow]}>
             <StartButton onPress={rec.start} />
             <View style={s.modes}>
-              <Mode type="run" label="Run" icon="walk" />
-              <Mode type="bike" label="Bike" icon="bicycle" />
+              <Mode label="Run" icon="walk" active={rec.activity === 'run'} onPress={() => rec.setActivity('run')} />
+              <Mode label="Bike" icon="bicycle" active={rec.activity === 'bike'} onPress={() => rec.setActivity('bike')} />
             </View>
           </View>
         ) : (
@@ -103,6 +99,17 @@ export default function RecordScreen({ rec, draft, onDraft, onSaved }: Props) {
   );
 }
 
+/** Run/Bike activity toggle button. */
+function Mode({ label, icon, active, onPress }: { label: string; icon: 'walk' | 'bicycle'; active: boolean; onPress: () => void }) {
+  return (
+    <Pressable style={[s.mode, active && s.modeOn]} onPress={onPress}>
+      <Ionicons name={icon} size={16} color={colors.primary} />
+      <Text style={s.modeText}>{label}</Text>
+    </Pressable>
+  );
+}
+
+/** One labelled value in the live stats card. */
 function Stat({ value, label }: { value: string; label: string }) {
   return (
     <View style={{ flex: 1, alignItems: 'center' }}>

@@ -34,7 +34,7 @@
           "imageWidth": 76
         }
       ],
-      "@rnmapbox/maps"
+      "@rnmapbox/maps",
       "expo-secure-store"
     ],
     "experiments": {

@@ -1,4 +1,5 @@
 // Shared props for the GhostMap component. Both the native (Mapbox) and web
+// variants (GhostMap.tsx / GhostMap.web.tsx) implement this same interface.
 import type { Ref } from 'react';
 
 export interface LatLng {

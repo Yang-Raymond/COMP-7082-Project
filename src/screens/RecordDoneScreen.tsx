@@ -1,3 +1,4 @@
+// Post-recording summary: route preview, stats, a name field, and save / save & challenge / discard actions.
 import React, { useState } from 'react';
 import { View, Text, TextInput, Pressable, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -15,6 +16,7 @@ interface Props {
   onDiscard: () => void;
 }
 
+/** Shows the finished draft and lets the user name it, then save, challenge or discard it. */
 export default function RecordDoneScreen({ draft, onSave, onSaveAndChallenge, onDiscard }: Props) {
   const { canChallenge } = useAuthContext();
   const insets = useSafeAreaInsets();

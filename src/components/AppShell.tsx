@@ -62,12 +62,8 @@ function Shell() {
     setOnboarded(true);
   };
 
-  useEffect(() => {
-    if (session && returnTab) {
-      setTab(returnTab);
-      setReturnTab(null);
-    }
-  }, [session, returnTab]);
+  // After signing in from a prompt, show the tab the user was on before being sent to sign in.
+  const activeTab = session && returnTab ? returnTab : tab;
 
   if (loading || onboarded === null) {
     return (
@@ -94,7 +90,7 @@ function Shell() {
   };
 
   const goSignIn = () => {
-    setReturnTab(tab);
+    setReturnTab(activeTab);
     dismissPrompt();
     setRaceRoute(null);
     setTab('you');
@@ -104,13 +100,13 @@ function Shell() {
   if (raceRoute) {
     
     content = <RaceScreen route={raceRoute} rec={rec} onExit={() => setRaceRoute(null)} />;
-  } else if (tab === 'home') {
+  } else if (activeTab === 'home') {
     content = (
       <HomeScreen onRace={(r) => requireAuth('Sign in to race this challenge.', () => setRaceRoute(r))} />
     );
-  } else if (tab === 'record') {
+  } else if (activeTab === 'record') {
     content = <RecordScreen rec={rec} draft={draft} onDraft={setDraft} onSaved={() => changeTab('home')} />;
-  } else if (tab === 'social') {
+  } else if (activeTab === 'social') {
     content = <PlaceholderScreen title="Social" />;
   } else {
     content = <YouScreen />;
@@ -122,7 +118,7 @@ function Shell() {
   return (
     <PhoneFrame>
       <View style={{ flex: 1 }}>{content}</View>
-      {!fullScreen && <TabBar tab={tab} onChange={changeTab} />}
+      {!fullScreen && <TabBar tab={activeTab} onChange={changeTab} />}
       {prompt && <SignInPrompt reason={prompt.reason} onSignIn={goSignIn} onCancel={dismissPrompt} />}
     </PhoneFrame>
   );

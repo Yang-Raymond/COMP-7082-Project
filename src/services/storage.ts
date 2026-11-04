@@ -1,4 +1,4 @@
-
+// Native local persistence (AsyncStorage): saved routes, onboarding flag and last known location.
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SavedRoute } from '../types/route';
 import type { LatLng } from '../types/map';

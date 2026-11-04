@@ -25,7 +25,8 @@ const FIT_PADDING = 24;
  * two points, the camera is bounded to the path's extent; otherwise it centers
  * on `center`. With no center yet, the camera is left at Mapbox's default view
  * and no user dot is drawn. The first center is applied instantly via
- * `defaultSettings`; later center changes ease.
+ * `defaultSettings`; the camera does not follow later center changes (so the
+ * user can pan freely) and only moves back via `ref.recenter()`.
  */
 export default function GhostMap({
   center,

@@ -1,3 +1,4 @@
+// Route recording state machine (idle/recording/paused) built on GpsTracker; produces a RouteDraft and saves it as a SavedRoute.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { GpsTracker } from '../services/gpsTracker';
 import { saveLastLocation, saveRoute } from '../services/storage';
@@ -16,6 +17,10 @@ export interface RouteDraft {
   activity: ActivityType;
 }
 
+/**
+ * Records GPS points while status is "recording", tracking active time (excluding pauses),
+ * distance and elevation gain. finish() stops GPS and returns the draft.
+ */
 export function useRouteRecorder() {
   const [status, setStatus] = useState<RecorderStatus>('idle');
   const [activity, setActivity] = useState<ActivityType>('run');
@@ -106,6 +111,7 @@ export function useRouteRecorder() {
   };
 }
 
+/** Persists a draft as a SavedRoute and remembers its end point as the last known location. */
 export async function saveDraft(draft: RouteDraft, name: string): Promise<SavedRoute> {
   const route: SavedRoute = {
     id: `${Date.now()}`,

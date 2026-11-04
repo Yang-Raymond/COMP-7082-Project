@@ -1,4 +1,4 @@
-
+// Web local persistence (localStorage); same API as storage.ts.
 import { SavedRoute } from '../types/route';
 import type { LatLng } from '../types/map';
 import { parseLatLng } from './location';

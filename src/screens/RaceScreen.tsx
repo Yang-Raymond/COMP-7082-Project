@@ -1,3 +1,4 @@
+// Race screen: map with the in-progress path and start/pause/end controls for racing a saved route.
 import { Ionicons } from '@expo/vector-icons';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import GhostMap from '../components/GhostMap';
@@ -13,6 +14,7 @@ interface Props {
 }
 
 
+/** Full-screen race view; uses the shared recorder for the user's run and returns via onExit. */
 export default function RaceScreen({ route, rec, onExit }: Props) {
   const { position, isLive } = useCurrentPosition();
 
