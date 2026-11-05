@@ -1,8 +1,8 @@
-import { useCallback, useRef, useState } from 'react';
-import { GpsTracker } from '../services/gpsTracker';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { computeGhostDelta } from '../services/ghostCompare';
-import { GhostDelta, SavedRoute } from '../types/route';
+import { GpsTracker } from '../services/gpsTracker';
 import { GpsFix } from '../types/gps';
+import { GhostDelta, SavedRoute } from '../types/route';
 
 export function useGhostRace(route: SavedRoute) {
   const [racing, setRacing] = useState(false);
@@ -10,6 +10,12 @@ export function useGhostRace(route: SavedRoute) {
   const [delta, setDelta] = useState<GhostDelta | null>(null);
   const trackerRef = useRef(new GpsTracker());
   const startTimeRef = useRef<number>(0);
+
+  // Stop tracking if the screen closes mid-run, or background updates would keep going
+  useEffect(() => {
+    const tracker = trackerRef.current;
+    return () => tracker.stop();
+  }, []);
 
   const start = useCallback(async () => {
     startTimeRef.current = Date.now();
@@ -21,7 +27,8 @@ export function useGhostRace(route: SavedRoute) {
         const elapsedMs = Date.now() - startTimeRef.current;
         setDelta(computeGhostDelta(route, fix.lat, fix.lng, elapsedMs));
       },
-      (message) => console.warn('Race GPS error:', message)
+      (message) => console.warn('Race GPS error:', message),
+      { background: true },
     );
   }, [route]);
 

@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { GpsTracker } from '../services/gpsTracker';
-import { saveRoute } from '../services/storage';
 import { totalDistance } from '../services/distance';
 import { elevationGain } from '../services/elevation';
+import { GpsTracker } from '../services/gpsTracker';
+import { saveRoute } from '../services/storage';
 import { ActivityType, RoutePoint, SavedRoute } from '../types/route';
 
 export type RecorderStatus = 'idle' | 'recording' | 'paused';
@@ -26,6 +26,11 @@ export function useRouteRecorder() {
   const statusRef = useRef<RecorderStatus>('idle');
   const accumulatedRef = useRef(0); 
   const segmentStartRef = useRef(0);
+    // Stop tracking if the screen closes mid-run, or background updates would keep going
+  useEffect(() => {
+    const tracker = trackerRef.current;
+    return () => tracker.stop();
+  }, []);
 
   const changeStatus = (s: RecorderStatus) => {
     statusRef.current = s;
@@ -61,7 +66,8 @@ export function useRouteRecorder() {
       (message) => {
         console.warn('Recorder GPS error:', message);
         changeStatus('idle'); 
-      }
+      },
+      { background: true },
     );
   }, []);
 
