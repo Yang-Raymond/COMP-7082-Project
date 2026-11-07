@@ -1,7 +1,6 @@
-// Install: npx expo install expo-secure-store
 // .env:    EXPO_PUBLIC_API_URL=http://<your-computer-LAN-IP>:4000   (not localhost; your phone can't reach that)
 //          or run `npm run tunnel` in server/ to set it to a public URL when the LAN IP doesn't work
-import * as SecureStore from 'expo-secure-store';
+import { deleteToken, getToken, setToken } from './tokenStorage';
 
 // Drop a trailing slash so paths don't end up as "//auth/signup"
 const API_URL = process.env.EXPO_PUBLIC_API_URL?.replace(/\/+$/, '');
@@ -46,24 +45,24 @@ export async function signUp(
   password: string
 ): Promise<{ needsConfirmation: boolean }> {
   const session = await api<Session>('/auth/signup', { username, email, password });
-  await SecureStore.setItemAsync(TOKEN_KEY, session.token);
+  await setToken(TOKEN_KEY, session.token);
   notify(session);
   return { needsConfirmation: false };
 }
 
 export async function signIn(email: string, password: string): Promise<void> {
   const session = await api<Session>('/auth/login', { email, password });
-  await SecureStore.setItemAsync(TOKEN_KEY, session.token);
+  await setToken(TOKEN_KEY, session.token);
   notify(session);
 }
 
 export async function signOut(): Promise<void> {
-  await SecureStore.deleteItemAsync(TOKEN_KEY);
+  await deleteToken(TOKEN_KEY);
   notify(null);
 }
 
 export async function getSession(): Promise<Session | null> {
-  const token = await SecureStore.getItemAsync(TOKEN_KEY);
+  const token = await getToken(TOKEN_KEY);
   if (!token) return null;
   try {
     const { user } = await api<{ user: AuthUser }>('/auth/me', undefined, token);
@@ -71,7 +70,7 @@ export async function getSession(): Promise<Session | null> {
   } catch (e) {
     const m = (e instanceof Error ? e.message : '').toLowerCase();
     // Only drop the token if the server rejected it, not if we're just offline
-    if (m.includes('invalid login credentials')) await SecureStore.deleteItemAsync(TOKEN_KEY);
+    if (m.includes('invalid login credentials')) await deleteToken(TOKEN_KEY);
     return null;
   }
 }
