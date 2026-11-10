@@ -8,9 +8,11 @@
     "scheme": "ghostracer",
     "userInterfaceStyle": "automatic",
     "ios": {
-      "icon": "./assets/expo.icon"
+      "icon": "./assets/expo.icon",
+      "bundleIdentifier": "com.darealiferatsteam.GhostRacer"
     },
     "android": {
+      "package": "com.darealiferatsteam.GhostRacer",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
@@ -35,7 +37,17 @@
         }
       ],
       "@rnmapbox/maps",
-      "expo-secure-store"
+      "expo-secure-store",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Allow GhostRacer to access your location while you are using the app.",
+          "locationAlwaysAndWhenInUsePermission": "Allow GhostRacer to access your location even when you are not using the app.",
+          "isIosBackgroundLocationEnabled": true,
+          "isAndroidBackgroundLocationEnabled": true,
+          "isAndroidForegroundServiceEnabled": true
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,
