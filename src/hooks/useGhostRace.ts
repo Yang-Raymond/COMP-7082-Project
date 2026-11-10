@@ -2,7 +2,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { GpsTracker } from '../services/gpsTracker';
 import { computeGhostDelta } from '../services/ghostCompare';
-import { GpsTracker } from '../services/gpsTracker';
 import { GpsFix } from '../types/gps';
 import { GhostDelta, SavedRoute } from '../types/route';
 
