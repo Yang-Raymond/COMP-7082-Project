@@ -1,4 +1,4 @@
-
+// Debug GPS tracking hook: collects raw fixes and a log, optionally POSTs them to a backend, and exports GPX.
 import { useCallback, useRef, useState } from "react";
 import { GpsTracker } from "../services/gpsTracker";
 import { postFix, testConnection } from "../services/backendClient";
@@ -6,8 +6,7 @@ import { totalDistance } from "../services/distance";
 import { buildGpx } from "../services/gpxExport";
 import { GpsFix, LogEntry, TrackingStatus } from "../types/gps";
 
-const STALE_AFTER_MS = 5000;
-
+/** Runs a GpsTracker watch and exposes fixes, log entries, backend ping and GPX export. */
 export function useGpsTracking() {
   const [status, setStatus] = useState<TrackingStatus>("idle");
   const [fixes, setFixes] = useState<GpsFix[]>([]);

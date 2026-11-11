@@ -8,16 +8,19 @@
     "scheme": "ghostracer",
     "userInterfaceStyle": "automatic",
     "ios": {
-      "icon": "./assets/expo.icon"
+      "icon": "./assets/expo.icon",
+      "bundleIdentifier": "com.darealiferatsteam.GhostRacer"
     },
     "android": {
+      "package": "com.darealiferatsteam.GhostRacer",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "package": "com.darealiferatsteam.GhostRacer"
     },
     "web": {
       "output": "static",
@@ -37,11 +40,28 @@
       "expo-font",
       "expo-image",
       "expo-status-bar",
-      "expo-web-browser"
+      "expo-web-browser",
+      "@rnmapbox/maps",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Allow GhostRacer to access your location while you are using the app.",
+          "locationAlwaysAndWhenInUsePermission": "Allow GhostRacer to access your location even when you are not using the app.",
+          "isIosBackgroundLocationEnabled": true,
+          "isAndroidBackgroundLocationEnabled": true,
+          "isAndroidForegroundServiceEnabled": true
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "db0aac8b-57c7-44e0-ade7-84284ec74f9c"
+      }
     }
   }
 }
