@@ -4,8 +4,6 @@ import { GpsTracker } from '../services/gpsTracker';
 import { saveLastLocation, saveRoute } from '../services/storage';
 import { totalDistance } from '../services/distance';
 import { elevationGain } from '../services/elevation';
-import { GpsTracker } from '../services/gpsTracker';
-import { saveRoute } from '../services/storage';
 import { ActivityType, RoutePoint, SavedRoute } from '../types/route';
 
 export type RecorderStatus = 'idle' | 'recording' | 'paused';
