@@ -9,6 +9,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '../constants/ghostTheme';
 import { friendlyAuthError, signIn, signUp } from './auth';
+import ForgotPasswordScreen from './ForgotPasswordScreen';
 
 export default function AuthScreen() {
   const insets = useSafeAreaInsets();
@@ -18,6 +19,7 @@ export default function AuthScreen() {
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [forgot, setForgot] = useState(false);
 
   const isSignIn = mode === 'signin';
 
@@ -44,6 +46,10 @@ export default function AuthScreen() {
       setBusy(false);
     }
   };
+
+  if (forgot) {
+    return <ForgotPasswordScreen onBack={() => setForgot(false)} />;
+  }
 
   return (
     <KeyboardAvoidingView
@@ -85,6 +91,16 @@ export default function AuthScreen() {
         onSubmitEditing={submit}
       />
 
+      {isSignIn && (
+        <Pressable
+          onPress={() => { setForgot(true); setError(null); }}
+          hitSlop={8}
+          style={s.forgotWrap}
+        >
+          <Text style={s.forgot}>Forgot password?</Text>
+        </Pressable>
+      )}
+
       {error && <Text style={s.error}>{error}</Text>}
 
       <Pressable
@@ -114,6 +130,8 @@ const s = StyleSheet.create({
   title: { fontSize: 28, fontWeight: '800', color: colors.text },
   sub: { fontSize: 15, color: colors.muted, marginBottom: 12 },
   input: { height: 52, borderRadius: 26, borderWidth: 1, borderColor: colors.border, paddingHorizontal: 20, fontSize: 16, color: colors.text },
+  forgotWrap: { alignSelf: 'flex-end' },
+  forgot: { color: colors.primary, fontSize: 14, fontWeight: '600' },
   error: { color: colors.behind, fontSize: 14 },
   primary: { height: 52, borderRadius: 26, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center', marginTop: 4 },
   primaryText: { color: colors.onPrimary, fontSize: 17, fontWeight: '700' },
