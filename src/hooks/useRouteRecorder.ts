@@ -60,14 +60,19 @@ export function useRouteRecorder() {
     return () => clearInterval(id);
   }, [status]);
 
-  /** Resets recording state, then starts the GPS watch. Accepted fixes are appended as points. */
-  const start = useCallback(async () => {
+  /** Clears all per-run state (points, elapsed time, accumulated time, last accepted fix). Only touches setters and refs, so it is stable. */
+  const resetRun = useCallback(() => {
     setPoints([]);
     setElapsedMs(0);
     accumulatedRef.current = 0;
+    lastAcceptedRef.current = undefined;
+  }, []);
+
+  /** Starts the GPS watch. Accepted fixes are appended as points. */
+  const start = useCallback(async () => {
+    resetRun();
     segmentStartRef.current = Date.now();
     startedAtRef.current = Date.now();
-    lastAcceptedRef.current = undefined;
     changeStatus('recording');
 
     await trackerRef.current.start(
@@ -95,7 +100,7 @@ export function useRouteRecorder() {
         changeStatus('idle'); 
       }
     );
-  }, []);
+  }, [resetRun]);
 
   /** Freezes the active-time total and stops appending points until resume(). */
   const pause = useCallback(() => {
@@ -118,13 +123,18 @@ export function useRouteRecorder() {
   
   const elevationGainMeters = useMemo(() => elevationGain(points), [points]);
 
-  /** Stops the GPS watch and returns the recorded points and stats as a RouteDraft. */
+  /**
+   * Stops the GPS watch and returns the recorded points and stats as a RouteDraft.
+   * Also clears the recorder. The returned draft keeps its own reference to the old points array.
+   */
   const finish = useCallback((): RouteDraft => {
     const durationMs = activeMs();
     trackerRef.current.stop();
     changeStatus('idle');
-    return { points, durationMs, distanceMeters, elevationGainMeters, activity };
-  }, [points, distanceMeters, elevationGainMeters, activity]);
+    const draft: RouteDraft = { points, durationMs, distanceMeters, elevationGainMeters, activity };
+    resetRun();
+    return draft;
+  }, [points, distanceMeters, elevationGainMeters, activity, resetRun]);
 
   return {
     status,
