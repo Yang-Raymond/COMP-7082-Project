@@ -41,3 +41,11 @@ export const pool = new Pool({
 pool.on("error", (err) => {
     console.error("Idle database connection error:", err.message);
 });
+
+// The listener above only covers idle connections. One taken out with pool.connect() (POST /routes does this
+// for its transaction) needs its own, or a connection dropped mid-query also crashes the whole process.
+pool.on("connect", (client) => {
+    client.on("error", (err) => {
+        console.error("Database connection error:", err.message);
+    });
+});

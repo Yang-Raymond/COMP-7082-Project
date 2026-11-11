@@ -1,15 +1,16 @@
 import React, { useEffect, useState } from 'react';
-import { View, ActivityIndicator, Platform } from 'react-native';
+import { View, ActivityIndicator, AppState, Platform } from 'react-native';
 import TabBar, { Tab } from './TabBar';
 import HomeScreen from '../screens/HomeScreen';
 import RecordScreen from '../screens/RecordScreen';
 import RaceScreen from '../screens/RaceScreen';
-import PlaceholderScreen from '../screens/PlaceholderScreen';
+import FriendsScreen from '../screens/FriendsScreen';
 import YouScreen from '../screens/YouScreen';
 import OnboardingScreen from '../screens/OnboardingScreen';
 import { AuthProvider, SignInPrompt, useAuthContext } from '../auth';
 import { LocationProvider } from '../hooks/useCurrentPosition';
 import { RouteDraft, useRouteRecorder } from '../hooks/useRouteRecorder';
+import { setUploadAccount, uploadPendingRoutes } from '../services/routeSync';
 import { hasOnboarded, markOnboarded } from '../services/storage';
 import { SavedRoute } from '../types/route';
 import { colors } from '../constants/ghostTheme';
@@ -55,6 +56,21 @@ function Shell() {
 
   useEffect(() => {
     hasOnboarded().then(setOnboarded).catch(() => setOnboarded(true));
+  }, []);
+
+  // Upload any "Save & Challenge" routes still waiting (saved while offline, or before the server was reachable):
+  // when the app starts signed in, when someone signs in, and whenever the app comes back to the foreground
+  // (iPhones usually resume the app rather than restart it)
+  useEffect(() => {
+    setUploadAccount(session);
+    if (session) uploadPendingRoutes().catch(() => {});
+  }, [session]);
+
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') uploadPendingRoutes().catch(() => {});
+    });
+    return () => sub.remove();
   }, []);
 
   const finishOnboarding = () => {
@@ -106,8 +122,8 @@ function Shell() {
     );
   } else if (activeTab === 'record') {
     content = <RecordScreen rec={rec} draft={draft} onDraft={setDraft} onSaved={() => changeTab('home')} />;
-  } else if (activeTab === 'social') {
-    content = <PlaceholderScreen title="Social" />;
+  } else if (activeTab === 'friends') {
+    content = <FriendsScreen onSignIn={goSignIn} />;
   } else {
     content = <YouScreen />;
   }

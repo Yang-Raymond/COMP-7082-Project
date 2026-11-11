@@ -11,7 +11,16 @@ export type ErrorListener = (message: string) => void;
 export interface StartOptions {
   /** Keep tracking while the screen is locked. Used for recordings and races. */
   background?: boolean;
+  /** Foreground watch settings. Replaces the navigation-grade defaults (the map's location dot uses lighter ones). */
+  watch?: Location.LocationOptions;
 }
+
+/** Navigation-grade settings for recordings and races. */
+const NAVIGATION_WATCH: Location.LocationOptions = {
+  accuracy: Location.Accuracy.BestForNavigation,
+  timeInterval: 1000,
+  distanceInterval: 1,
+};
 
 // Expo Go and the web can't track in the background, so they always use the foreground watcher
 const backgroundSupported =
@@ -45,7 +54,8 @@ export class GpsTracker {
 
   /**
    * Starts foreground or background position tracking. Background tracking falls
-   * back to the foreground watcher when it is unavailable.
+   * back to the foreground watcher when it is unavailable. `options.watch` overrides
+   * the navigation-grade foreground settings.
    */
   async start(onFix: FixListener, onError: ErrorListener, options: StartOptions = {}): Promise<void> {
     if (this.subscription || this.isTracking) return;
@@ -65,11 +75,7 @@ export class GpsTracker {
 
     try {
       this.subscription = await Location.watchPositionAsync(
-        {
-          accuracy: Location.Accuracy.BestForNavigation,
-          timeInterval: 1000,
-          distanceInterval: 1,
-        },
+        options.watch ?? NAVIGATION_WATCH,
         (loc) => onFix(toGpsFix(loc))
       );
     } catch (err) {
@@ -86,9 +92,7 @@ export class GpsTracker {
 
       setBackgroundListener((locations) => locations.forEach((loc) => onFix(toGpsFix(loc))));
       await Location.startLocationUpdatesAsync(BACKGROUND_LOCATION_TASK, {
-        accuracy: Location.Accuracy.BestForNavigation,
-        timeInterval: 1000,
-        distanceInterval: 1,
+        ...NAVIGATION_WATCH,
         activityType: Location.ActivityType.Fitness,
         pausesUpdatesAutomatically: false,
         showsBackgroundLocationIndicator: true,
@@ -106,9 +110,15 @@ export class GpsTracker {
     }
   }
 
-    async getCurrent(): Promise<GpsFix | null> {
-    const granted = await this.requestPermission();
-    if (!granted) return null;
+  /**
+   * Resolves true when device location services are on. If they are off, shows the
+   * Android system "turn on location" dialog the first time only.
+   * Later calls just re-check without prompting. Never prompts on iOS/web.
+   * Pass `force` for a user-initiated request, such as the locate button, to prompt
+   * even if the dialog was already shown.
+   */
+  async ensureServicesEnabled(force = false): Promise<boolean> {
+
     try {
       if (!(await this.ensureServicesEnabled())) return null;
       const loc = await Location.getCurrentPositionAsync({

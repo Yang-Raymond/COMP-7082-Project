@@ -62,3 +62,12 @@ CREATE TABLE IF NOT EXISTS run_points (
   accel_mag REAL,
   UNIQUE (run_id, seq)
 );
+
+-- Route saving (POST /routes). Written as ALTER ... IF NOT EXISTS so running this file again
+-- also upgrades a database that was created before these columns existed.
+-- client_id: a UUID the phone makes, so a retried upload returns the saved route instead of a copy
+ALTER TABLE routes ADD COLUMN IF NOT EXISTS client_id UUID UNIQUE;
+ALTER TABLE routes ADD COLUMN IF NOT EXISTS activity VARCHAR(10) NOT NULL DEFAULT 'run' CHECK (activity IN ('run', 'bike'));
+ALTER TABLE routes ADD COLUMN IF NOT EXISTS elevation_gain_m REAL;
+ALTER TABLE routes ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
+ALTER TABLE run_points ADD COLUMN IF NOT EXISTS alt_m REAL;

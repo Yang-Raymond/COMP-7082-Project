@@ -22,6 +22,12 @@ export async function deleteRoute(id: string): Promise<void> {
   window.localStorage.setItem(KEY, JSON.stringify(routes.filter((r) => r.id !== id)));
 }
 
+/** Changes some fields of one saved route, such as its upload state. Does nothing if it was deleted. */
+export async function updateRoute(id: string, patch: Partial<SavedRoute>): Promise<void> {
+  const routes = await getRoutes();
+  window.localStorage.setItem(KEY, JSON.stringify(routes.map((r) => (r.id === id ? { ...r, ...patch } : r))));
+}
+
 /** Returns the last location the app saw, or null if none is stored or the stored value is invalid. */
 export async function getLastLocation(): Promise<LatLng | null> {
   try {
@@ -47,4 +53,14 @@ export async function hasOnboarded(): Promise<boolean> {
 
 export async function markOnboarded(): Promise<void> {
   window.localStorage.setItem(ONBOARDED_KEY, '1');
+}
+
+/** Any JSON value saved under `key`, or null if nothing has been saved yet. */
+export async function readJSON<T>(key: string): Promise<T | null> {
+  const raw = window.localStorage.getItem(key);
+  return raw ? (JSON.parse(raw) as T) : null;
+}
+
+export async function writeJSON(key: string, value: unknown): Promise<void> {
+  window.localStorage.setItem(key, JSON.stringify(value));
 }
