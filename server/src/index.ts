@@ -1,10 +1,11 @@
 import bcrypt from "bcryptjs";
 import cors from "cors";
 import "dotenv/config"; // must stay first so db.ts can read process.env
-import type { Request, Response } from "express";
+import type { NextFunction, Request, Response } from "express";
 import express from "express";
 import jwt from "jsonwebtoken";
 import { pool } from "./db";
+import { routesRouter } from "./routes";
 
 const JWT_SECRET = process.env.JWT_SECRET;
 if (!JWT_SECRET) {
@@ -15,7 +16,8 @@ const app = express();
 const port = Number(process.env.PORT) || 4000;
 
 app.use(cors());
-app.use(express.json());
+// The default 100 KB limit is too small for a long recording: about 70 bytes per GPS point, one point per second
+app.use(express.json({ limit: "5mb" }));
 
 type UserRow = {
   id: number;
@@ -104,6 +106,23 @@ app.get("/auth/me", async (req: Request, res: Response) => {
   } catch {
     res.status(401).json({ error: "Invalid login credentials" });
   }
+});
+
+// ---------- routes ----------
+
+app.use("/routes", routesRouter);
+
+// Errors no handler caught (bad JSON, a body over the size limit, ...): answer in JSON like every other
+// error, instead of Express's HTML page with a stack trace
+app.use((err: any, req: Request, res: Response, next: NextFunction) => {
+  if (res.headersSent) return next(err);
+  if (err?.type === "entity.parse.failed") return res.status(400).json({ error: "The request body is not valid JSON." });
+  if (err?.type === "entity.too.large") return res.status(413).json({ error: "The upload is too large." });
+  if (err?.status >= 400 && err.status < 500) {
+    return res.status(err.status).json({ error: err.expose ? err.message : "Bad request." });
+  }
+  console.error(`${req.method} ${req.path} failed:`, err);
+  res.status(500).json({ error: "Server error." });
 });
 
 app.listen(port, () => {

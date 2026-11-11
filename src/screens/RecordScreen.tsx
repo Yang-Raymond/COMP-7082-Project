@@ -10,6 +10,7 @@ import RecordDoneScreen from './RecordDoneScreen';
 import { useCurrentPosition } from '../hooks/useCurrentPosition';
 import { RouteDraft, saveDraft, useRouteRecorder } from '../hooks/useRouteRecorder';
 import { formatClock, formatKm } from '../services/format';
+import { uploadPendingRoutes } from '../services/routeSync';
 import { colors, shadow } from '../constants/ghostTheme';
 import type { GhostMapHandle } from '../types/map';
 
@@ -27,7 +28,7 @@ interface Props {
  * stats with pause/resume and finish. After finishing: the RecordDoneScreen for the draft.
  */
 export default function RecordScreen({ rec, draft, onDraft, onSaved }: Props) {
-  const { requireAuth } = useAuthContext();
+  const { requireAuth, user } = useAuthContext();
   const { position, isLive } = useCurrentPosition();
   const mapRef = useRef<GhostMapHandle>(null);
 
@@ -37,18 +38,29 @@ export default function RecordScreen({ rec, draft, onDraft, onSaved }: Props) {
 
   const finish = () => onDraft(rec.finish());
 
-  const save = async (name: string) => {
-    if (!draft) return;
-    await saveDraft(draft, name);
+  const saving = useRef(false);
+
+  // "Save only" keeps the route on this phone. "Save & Challenge" also uploads it so others can race it.
+  const save = async (name: string, upload = false) => {
+    // A second tap while the first save is still writing would save (and upload) the run twice
+    if (!draft || saving.current) return;
+    saving.current = true;
+    try {
+      await saveDraft(draft, name, { upload, ownerId: user?.id });
+    } finally {
+      saving.current = false;
+    }
     onDraft(null);
     onSaved();
+    // Uploads in the background. If the server can't be reached now, the route stays pending and goes up later.
+    if (upload) uploadPendingRoutes().catch(() => {});
   };
 
   if (draft) {
     return <RecordDoneScreen
       draft={draft}
-      onSave={save}
-      onSaveAndChallenge={(name) => requireAuth('Sign in to challenge your friends.', () => save(name))}
+      onSave={(name) => save(name)}
+      onSaveAndChallenge={(name) => requireAuth('Sign in to challenge your friends.', () => save(name, true))}
       onDiscard={() => onDraft(null)}
     />;
   }

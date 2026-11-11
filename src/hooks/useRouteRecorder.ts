@@ -4,6 +4,7 @@ import { GpsTracker } from '../services/gpsTracker';
 import { saveLastLocation, saveRoute } from '../services/storage';
 import { totalDistance } from '../services/distance';
 import { elevationGain } from '../services/elevation';
+import { makeUuid } from '../services/uuid';
 import { ActivityType, RoutePoint, SavedRoute } from '../types/route';
 
 export type RecorderStatus = 'idle' | 'recording' | 'paused';
@@ -118,8 +119,19 @@ export function useRouteRecorder() {
   };
 }
 
-/** Persists a draft as a SavedRoute and remembers its end point as the last known location. */
-export async function saveDraft(draft: RouteDraft, name: string): Promise<SavedRoute> {
+/**
+ * Persists a draft as a SavedRoute and remembers its end point as the last known location.
+ * With `upload` and the signed-in account's `ownerId`, the route is also marked to be uploaded;
+ * call uploadPendingRoutes() afterwards.
+ */
+export async function saveDraft(
+  draft: RouteDraft,
+  name: string,
+  opts: { upload?: boolean; ownerId?: number } = {}
+): Promise<SavedRoute> {
+  // Uploading needs an account, and the server needs at least two points to make a route;
+  // otherwise the route just stays on the phone
+  const upload = Boolean(opts.upload) && opts.ownerId != null && draft.points.length >= 2;
   const route: SavedRoute = {
     id: `${Date.now()}`,
     name,
@@ -129,6 +141,7 @@ export async function saveDraft(draft: RouteDraft, name: string): Promise<SavedR
     durationMs: draft.durationMs,
     elevationGainMeters: draft.elevationGainMeters,
     activity: draft.activity,
+    ...(upload ? { clientId: makeUuid(), ownerId: opts.ownerId, upload: { state: 'pending' as const } } : {}),
   };
   await saveRoute(route);
   const end = draft.points[draft.points.length - 1];
