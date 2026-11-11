@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AuthScreen, signOut, useAuthContext } from '../auth';
@@ -17,7 +18,6 @@ type Activity = {
   winner: string;
 };
 
-// TODO: replace with real data once the server has an activities route.
 const PLACEHOLDER_ACTIVITIES: Activity[] = [
   { id: '1', title: 'BCIT Track', date: 'November 6, 2026 at 10:49 AM', time: '8:23 min', distance: '2.32 km', winner: 'Jin' },
 ];
@@ -30,6 +30,20 @@ export default function YouScreen() {
   const [showSettings, setShowSettings] = useState(false);
   const [photo, setPhoto] = useState<string | null>(null);
 
+  // Load the saved photo when the screen opens
+  useEffect(() => {
+    const loadPhoto = async () => {
+      if (user?.username) {
+        const savedPhoto = await AsyncStorage.getItem(`profile_photo_${user.username}`);
+        if (savedPhoto) {
+          setPhoto(savedPhoto);
+        }
+      }
+    };
+    loadPhoto();
+  }, [user?.username]);
+
+  // Save the new photo when picked
   const pickPhoto = async () => {
     const res = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
@@ -37,7 +51,14 @@ export default function YouScreen() {
       aspect: [1, 1],
       quality: 0.7,
     });
-    if (!res.canceled) setPhoto(res.assets[0].uri);
+    
+    if (!res.canceled) {
+      const newUri = res.assets[0].uri;
+      setPhoto(newUri);
+      if (user?.username) {
+        await AsyncStorage.setItem(`profile_photo_${user.username}`, newUri);
+      }
+    }
   };
 
   if (!isSignedIn) return <AuthScreen />;
