@@ -1,12 +1,14 @@
 // Native (iOS/Android) map built on the Mapbox Maps SDK via @rnmapbox/maps.
-// Draws the route path, the user's location dot and the ghost marker, and either follows the user or fits the camera to the whole route.
+// Draws the route path, tappable route pins, the user's location dot and the ghost marker, 
+// and either follows the user or fits the camera to the whole route.
 // Requires a EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN.
 import { useImperativeHandle, useMemo, useRef } from 'react';
-import { StyleSheet, View, Text } from 'react-native';
+import { StyleSheet, View, Text, Pressable } from 'react-native';
 import Mapbox from '@rnmapbox/maps';
 import type { Feature, LineString } from 'geojson';
 import { colors } from '../constants/ghostTheme';
-import type { GhostMapProps } from '../types/map';
+import RoutePin from './RoutePin';
+import type { GhostMapProps, LatLng } from '../types/map';
 
 const MAPBOX_ACCESS_TOKEN = process.env.EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN;
 
@@ -18,15 +20,27 @@ if (MAPBOX_ACCESS_TOKEN) {
 
 const FOLLOW_ZOOM = 16;
 const FIT_PADDING = 24;
+const FIT_PADDING_LARGE = 60;
+
+/** Bounding box of a path as Mapbox [lng, lat] corners (north-east and south-west). */
+function pathExtent(path: LatLng[]) {
+  const lats = path.map((p) => p.lat);
+  const lngs = path.map((p) => p.lng);
+  return {
+    ne: [Math.max(...lngs), Math.max(...lats)],
+    sw: [Math.min(...lngs), Math.min(...lats)],
+  };
+}
 
 /**
  * Renders the Mapbox map. Coordinates are converted to Mapbox's
  * [longitude, latitude] order. When `fitPath` is set and the path has at least
- * two points, the camera is bounded to the path's extent; otherwise it centers
+ * two points, the camera is bounded to the path's extent. Otherwise it centers
  * on `center`. With no center yet, the camera is left at Mapbox's default view
  * and no user dot is drawn. The first center is applied instantly via
- * `defaultSettings`; the camera does not follow later center changes (so the
- * user can pan freely) and only moves back via `ref.recenter()`.
+ * `defaultSettings`. The camera does not follow later center changes and only moves back via `ref.recenter()` or to a route
+ * via `ref.fitTo()`. Each entry in `pins` is drawn as a tappable teardrop whose
+ * tip sits on its coordinate. Tapping a pin calls `onPinPress` with the pin's id.
  */
 export default function GhostMap({
   center,
@@ -36,6 +50,8 @@ export default function GhostMap({
   fitPath = false,
   pathColor = colors.blue,
   interactive = true,
+  pins,
+  onPinPress,
   ref,
 }: GhostMapProps) {
   const cameraRef = useRef<Mapbox.Camera>(null);
@@ -53,13 +69,19 @@ export default function GhostMap({
           animationDuration: 600,
         });
       },
+      // Animates the camera so the whole path is visible.
+      fitTo: (points) => {
+        if (points.length < 2) return;
+        const { ne, sw } = pathExtent(points);
+        cameraRef.current?.fitBounds(ne, sw, FIT_PADDING_LARGE, 600);
+      },
     }),
     [center],
   );
 
   const hasPath = !!path && path.length > 1;
 
-  // GeoJSON line for the route; memoized so the native source only updates when the path changes.
+  // GeoJSON line for the route. Memoized so the native source only updates when the path changes.
   const pathShape = useMemo<Feature<LineString> | null>(() => {
     if (!hasPath) return null;
     return {
@@ -72,11 +94,8 @@ export default function GhostMap({
   // Bounding box of the path, used when the camera should show the whole route.
   const bounds = useMemo(() => {
     if (!fitPath || !hasPath) return undefined;
-    const lats = path!.map((p) => p.lat);
-    const lngs = path!.map((p) => p.lng);
     return {
-      ne: [Math.max(...lngs), Math.max(...lats)],
-      sw: [Math.min(...lngs), Math.min(...lats)],
+      ...pathExtent(path!),
       paddingTop: FIT_PADDING,
       paddingBottom: FIT_PADDING,
       paddingLeft: FIT_PADDING,
@@ -105,7 +124,10 @@ export default function GhostMap({
           animationMode="easeTo"
           animationDuration={1000}
         />
-      ) : null}
+      ) : (
+        // No location yet: keep a camera so `fitTo` can still move to a selected route.
+        <Mapbox.Camera ref={cameraRef} />
+      )}
 
       {pathShape && (
         <Mapbox.ShapeSource id="ghost-path" shape={pathShape}>
@@ -127,6 +149,19 @@ export default function GhostMap({
           </View>
         </Mapbox.MarkerView>
       )}
+
+      {pins?.map((pin) => (
+        <Mapbox.MarkerView
+          key={pin.id}
+          coordinate={[pin.coordinate.lng, pin.coordinate.lat]}
+          anchor={{ x: 0.5, y: 1 }}
+          allowOverlap
+        >
+          <Pressable onPress={() => onPinPress?.(pin.id)} accessibilityLabel="Select route">
+            <RoutePin />
+          </Pressable>
+        </Mapbox.MarkerView>
+      ))}
 
       {showUser && center && (
         <Mapbox.MarkerView coordinate={[center.lng, center.lat]} anchor={{ x: 0.5, y: 0.5 }} allowOverlap>

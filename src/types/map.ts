@@ -7,10 +7,18 @@ export interface LatLng {
   lng: number;
 }
 
+/** A tappable pin drawn at the specified coordinate */
+export interface MapPin {
+  id: string;
+  coordinate: LatLng;
+}
+
 /** Provides methods to control the map programmatically */
 export interface GhostMapHandle {
   /** Move the camera back onto `center` */
   recenter: () => void;
+  /** Animate the camera to show the whole `points` path */
+  fitTo: (points: LatLng[]) => void;
 }
 
 /** Props for the GhostMap component. */
@@ -31,4 +39,8 @@ export interface GhostMapProps {
   pathColor?: string;
   /** Allow pan/zoom gestures. */
   interactive?: boolean;
+  /** Pins to draw */
+  pins?: MapPin[];
+  /** Called with the pin's id when a pin is tapped. */
+  onPinPress?: (id: string) => void;
 }

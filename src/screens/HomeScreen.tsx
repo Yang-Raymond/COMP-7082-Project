@@ -1,4 +1,5 @@
 // Home screen: map with a search bar and activity filters, plus a bottom sheet listing nearby challenges.
+// Every listed route gets a pin at its start. Tapping a pin or card selects the route (draws it and zooms to fit).
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, TextInput, Pressable, Platform, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -32,6 +33,8 @@ function Chip({ label, icon, on, onPress }: { label: string; icon: IconName; on:
 /**
  * Loads saved routes, filters them by search text and activity, and renders them
  * as race-able cards over a live map centered on the shared current position.
+ * Each visible route has a start pin on the map. Selecting a route
+ * draws its path and fits the camera to it.
  */
 export default function HomeScreen({ onRace }: { onRace: (r: SavedRoute) => void }) {
   const insets = useSafeAreaInsets();
@@ -57,8 +60,42 @@ export default function HomeScreen({ onRace }: { onRace: (r: SavedRoute) => void
     [routes, query, filter]
   );
 
+  // Route currently highlighted on the map
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const selected = useMemo(() => visible.find((r) => r.id === selectedId), [visible, selectedId]);
+
+  // One pin per visible route, placed at its start point.
+  const pins = useMemo(
+    () => visible.filter((r) => r.points[0]).map((r) => ({ id: r.id, coordinate: r.points[0] })),
+    [visible]
+  );
+
+  /** Highlights a route and zooms the map to fit it. */
+  const selectRoute = (r: SavedRoute) => {
+    setSelectedId(r.id);
+    mapRef.current?.fitTo(r.points);
+  };
+
+  /** Card tap: first tap selects the route, a second tap on the selected route starts the race.
+   * CHANGE LATER WHEN REDESIGNING THE HOME SCREEN.
+   * New logic to be implemented later: tapping a card expands it and shows more details, 
+   * fits route on map, and a "Race" button is shown to start the race. 
+   * Tapping the card again collapses it.
+   */
+  const onCardPress = (r: SavedRoute) => {
+    if (r.id === selectedId) onRace(r);
+    else selectRoute(r);
+  };
+
+  /** Pin tap: only selects and fits the route on the map */
+  const onPinPress = (id: string) => {
+    const r = visible.find((v) => v.id === id);
+    if (r) selectRoute(r);
+  };
+
   const remove = async (id: string) => {
     await deleteRoute(id);
+    if (id === selectedId) setSelectedId(null);
     setRoutes(await getRoutes());
   };
 
@@ -104,7 +141,7 @@ export default function HomeScreen({ onRace }: { onRace: (r: SavedRoute) => void
         // Only measure from a live fix, never from a stale stored location.
         const away = isLive && position && start ? formatDistance(haversineDistance(position, start)) : null;
         return (
-          <Pressable key={r.id} style={s.card} onPress={() => onRace(r)}>
+          <Pressable key={r.id} style={s.card} onPress={() => onCardPress(r)}>
             <View style={s.cardHead}>
               <View style={s.avatar}>
                 <Text style={s.avatarText}>{r.name.charAt(0).toUpperCase()}</Text>
@@ -143,7 +180,7 @@ export default function HomeScreen({ onRace }: { onRace: (r: SavedRoute) => void
   /**
    * Map using Mapbox.
    */
-  const map = <GhostMap ref={mapRef} center={position} showUser={isLive} />;
+  const map = <GhostMap ref={mapRef} center={position} showUser={isLive} pins={pins} onPinPress={onPinPress} path={selected?.points} />;
 
   return (
     <View style={s.root}>
