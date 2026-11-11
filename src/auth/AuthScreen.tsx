@@ -71,6 +71,9 @@ export default function AuthScreen({ initialMode = 'signin', onBack, onSuccess }
     setConfirm('');
     setError(null);
   };
+  if (forgot) {
+    return <ForgotPasswordScreen onBack={() => setForgot(false)} />;
+  }
 
   return (
     <KeyboardAvoidingView style={s.root} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
@@ -116,6 +119,12 @@ export default function AuthScreen({ initialMode = 'signin', onBack, onSuccess }
         )}
 
         {error && <Text style={s.error}>{error}</Text>}
+        
+        {isSignIn && (
+          <Pressable onPress={() => setForgot(true)} hitSlop={8} style={{ alignSelf: 'flex-end' }}>
+            <Text style={s.switchLink}>Forgot password?</Text>
+          </Pressable>
+        )}
 
         <Pressable
           style={({ pressed }) => [s.primary, (pressed || busy) && { opacity: 0.8 }]}
