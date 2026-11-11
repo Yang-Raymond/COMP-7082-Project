@@ -2,6 +2,7 @@
 // .env:    EXPO_PUBLIC_API_URL=http://<your-computer-LAN-IP>:4000   (not localhost; your phone can't reach that)
 //          or run `npm run tunnel` in server/ to set it to a public URL when the LAN IP doesn't work
 import * as SecureStore from 'expo-secure-store';
+import { Platform } from 'react-native';
 
 // Drop a trailing slash so paths don't end up as "//auth/signup"
 const API_URL = process.env.EXPO_PUBLIC_API_URL?.replace(/\/+$/, '');
@@ -11,6 +12,23 @@ const REQUEST_TIMEOUT_MS = 15_000;
 export const isAuthConfigured = Boolean(API_URL);
 export type AuthUser = { id: number; username: string; email: string; points: number };
 export type Session = { token: string; user: AuthUser };
+
+// SecureStore only works on iOS/Android. In the browser, fall back to localStorage.
+const ls = () => (globalThis as any).localStorage as Storage | undefined;
+const store = {
+  get: (k: string): Promise<string | null> =>
+    Platform.OS === 'web'
+      ? Promise.resolve(ls()?.getItem(k) ?? null)
+      : SecureStore.getItemAsync(k),
+  set: (k: string, v: string): Promise<void> =>
+    Platform.OS === 'web'
+      ? Promise.resolve(void ls()?.setItem(k, v))
+      : SecureStore.setItemAsync(k, v),
+  del: (k: string): Promise<void> =>
+    Platform.OS === 'web'
+      ? Promise.resolve(void ls()?.removeItem(k))
+      : SecureStore.deleteItemAsync(k),
+};
 
 const listeners = new Set<(s: Session | null) => void>();
 const notify = (s: Session | null) => listeners.forEach((cb) => cb(s));
@@ -46,24 +64,24 @@ export async function signUp(
   password: string
 ): Promise<{ needsConfirmation: boolean }> {
   const session = await api<Session>('/auth/signup', { username, email, password });
-  await SecureStore.setItemAsync(TOKEN_KEY, session.token);
+  await store.set(TOKEN_KEY, session.token);
   notify(session);
   return { needsConfirmation: false };
 }
 
 export async function signIn(email: string, password: string): Promise<void> {
   const session = await api<Session>('/auth/login', { email, password });
-  await SecureStore.setItemAsync(TOKEN_KEY, session.token);
+  await store.set(TOKEN_KEY, session.token);
   notify(session);
 }
 
 export async function signOut(): Promise<void> {
-  await SecureStore.deleteItemAsync(TOKEN_KEY);
+  await store.del(TOKEN_KEY);
   notify(null);
 }
 
 export async function getSession(): Promise<Session | null> {
-  const token = await SecureStore.getItemAsync(TOKEN_KEY);
+  const token = await store.get(TOKEN_KEY);
   if (!token) return null;
   try {
     const { user } = await api<{ user: AuthUser }>('/auth/me', undefined, token);
@@ -71,7 +89,7 @@ export async function getSession(): Promise<Session | null> {
   } catch (e) {
     const m = (e instanceof Error ? e.message : '').toLowerCase();
     // Only drop the token if the server rejected it, not if we're just offline
-    if (m.includes('invalid login credentials')) await SecureStore.deleteItemAsync(TOKEN_KEY);
+    if (m.includes('invalid login credentials')) await store.del(TOKEN_KEY);
     return null;
   }
 }
@@ -83,6 +101,20 @@ export function onAuthChange(callback: (session: Session | null) => void): () =>
   };
 }
 
+/** Sends a 6-digit reset code. Always succeeds, so it can't be used to check which emails exist. */
+export async function requestPasswordReset(email: string): Promise<void> {
+  await api<{ ok: boolean }>('/auth/forgot-password', { email: email.trim() });
+}
+
+/** Checks the code and sets the new password. */
+export async function resetPassword(email: string, code: string, newPassword: string): Promise<void> {
+  await api<{ ok: boolean }>('/auth/reset-password', {
+    email: email.trim(),
+    code: code.trim(),
+    password: newPassword,
+  });
+}
+
 export function friendlyAuthError(e: unknown): string {
   const msg = e instanceof Error ? e.message : String(e);
   const m = msg.toLowerCase();
@@ -91,5 +123,6 @@ export function friendlyAuthError(e: unknown): string {
   if (m.includes('network request failed') || m.includes('failed to fetch') || m.includes('timed out'))
     return `Can't reach the server${API_URL ? ` at ${API_URL}` : ''}. Check that it's running and your phone can reach it.`;
   if (m.includes('password should be')) return 'Password is too weak. Use at least 6 characters.';
+  if (m.includes('invalid or expired code')) return 'That code is wrong or has expired. Request a new one.';
   return msg;
 }

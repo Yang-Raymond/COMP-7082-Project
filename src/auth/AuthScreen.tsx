@@ -12,6 +12,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Field from '../components/Field';
 import { colors } from '../constants/ghostTheme';
 import { friendlyAuthError, signIn, signUp } from './auth';
+import ForgotPasswordScreen from './ForgotPasswordScreen';
 
 type Mode = 'signin' | 'signup';
 
@@ -32,6 +33,7 @@ export default function AuthScreen({ initialMode = 'signin', onBack, onSuccess }
   const [confirm, setConfirm] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [forgot, setForgot] = useState(false);
 
   const isSignIn = mode === 'signin';
 
@@ -69,6 +71,9 @@ export default function AuthScreen({ initialMode = 'signin', onBack, onSuccess }
     setConfirm('');
     setError(null);
   };
+  if (forgot) {
+    return <ForgotPasswordScreen onBack={() => setForgot(false)} />;
+  }
 
   return (
     <KeyboardAvoidingView style={s.root} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
@@ -114,6 +119,12 @@ export default function AuthScreen({ initialMode = 'signin', onBack, onSuccess }
         )}
 
         {error && <Text style={s.error}>{error}</Text>}
+        
+        {isSignIn && (
+          <Pressable onPress={() => setForgot(true)} hitSlop={8} style={{ alignSelf: 'flex-end' }}>
+            <Text style={s.switchLink}>Forgot password?</Text>
+          </Pressable>
+        )}
 
         <Pressable
           style={({ pressed }) => [s.primary, (pressed || busy) && { opacity: 0.8 }]}

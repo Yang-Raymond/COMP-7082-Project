@@ -13,6 +13,14 @@ CREATE TABLE IF NOT EXISTS users (
   created_at    TIMESTAMPTZ  NOT NULL DEFAULT now()
 );
 
+-- One pending password-reset code per user (6-digit code, stored hashed)
+CREATE TABLE IF NOT EXISTS password_resets (
+  user_id    INTEGER     PRIMARY KEY REFERENCES users (id) ON DELETE CASCADE,
+  code_hash  TEXT        NOT NULL,
+  expires_at TIMESTAMPTZ NOT NULL,
+  attempts   INTEGER     NOT NULL DEFAULT 0
+);
+
 CREATE TABLE IF NOT EXISTS routes (
   id         INTEGER      GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   creator_id INTEGER      REFERENCES users (id) ON DELETE SET NULL,

@@ -111,7 +111,7 @@ export function LocationProvider({ children }: { children: React.ReactNode }) {
         offer(toLatLng(cached), fresh ? Source.Live : Source.LastKnown);
       }
       if (cancelled) return;
-      await tracker.start(onFix, (msg) => console.warn('Location watch error:', msg), { watch: WATCH_OPTIONS });
+await tracker.start(onFix, (msg) => console.warn('Location watch error:', msg), { watch: WATCH_OPTIONS });
       if (cancelled) tracker.stop(); 
     };
 

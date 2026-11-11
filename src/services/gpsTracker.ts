@@ -118,16 +118,33 @@ export class GpsTracker {
    * even if the dialog was already shown.
    */
   async ensureServicesEnabled(force = false): Promise<boolean> {
+
     try {
-      if (await Location.hasServicesEnabledAsync()) return true;
-      if (Platform.OS !== "android" || (servicesPromptShown && !force)) return false;
-      servicesPromptShown = true;
-      await Location.enableNetworkProviderAsync();
-      return await Location.hasServicesEnabledAsync();
+      if (!(await this.ensureServicesEnabled())) return null;
+      const loc = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Balanced,
+      });
+      return toGpsFix(loc);
     } catch {
-      return false;
+      return null;
     }
   }
+
+  /**
+   * Returns true if location services are on. On Android, prompts the user to
+   * turn them on (once per launch unless `force` is true).
+   */
+    async ensureServicesEnabled(force = false): Promise<boolean> {
+      try {
+        if (await Location.hasServicesEnabledAsync()) return true;
+        if (Platform.OS !== "android" || (servicesPromptShown && !force)) return false;
+        servicesPromptShown = true;
+        await Location.enableNetworkProviderAsync();
+        return await Location.hasServicesEnabledAsync();
+      } catch {
+        return false;
+      }
+    }
 
   /**
    * Returns the OS's cached last-known position without spinning up GPS.

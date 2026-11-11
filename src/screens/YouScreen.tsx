@@ -129,123 +129,11 @@ export default function YouScreen() {
 
   return (
     <View ref={root} style={[s.root, { paddingTop: insets.top + 8 }]}>
-      <View style={s.topRow}>
-        <Pressable
-          ref={gear}
-          hitSlop={8}
-          accessibilityLabel="Settings"
-          onPress={() => measureAnchor(gear.current, root.current, setSettings)}
-        >
-          <Ionicons name="settings-outline" size={26} color={colors.primary} />
-        </Pressable>
-      </View>
-
-      <ProfileHeader
-        name={name}
-        username={user.username}
-        onAddPhoto={() => showNotice('Profile photo', 'Adding a profile photo is coming soon.')}
-        stats={[
-          { value: routes.length, label: routes.length === 1 ? 'activity' : 'activities' },
-          { value: friendCount, label: friendCount === 1 ? 'friend' : 'friends' },
-        ]}
-      />
-
-      <View style={s.buttons}>
-        <Pressable style={s.btn} onPress={() => showNotice('Edit profile', 'Editing your profile is coming soon.')}>
-          <Text style={s.btnText}>Edit profile</Text>
-        </Pressable>
-        <Pressable style={s.btn} onPress={shareProfile}>
-          <Text style={s.btnText}>Share profile</Text>
-        </Pressable>
-      </View>
-
-      <View style={s.tabs} accessibilityRole="tablist">
-        <SectionTab label="Pinned activities" active={section === 'pinned'} onPress={() => setSection('pinned')}>
-          <Ionicons name="apps" size={24} color={colors.primary} />
-        </SectionTab>
-        <SectionTab label="All activities" active={section === 'activities'} onPress={() => setSection('activities')}>
-          <MaterialIcons name="route" size={26} color={colors.primary} />
-        </SectionTab>
-      </View>
-
-      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 16 }}>
-        {section === 'pinned' ? pinnedUI : activitiesUI}
-      </ScrollView>
-
-      {settings && (
-        <PopoverMenu
-          anchor={settings}
-          items={[{ label: 'Sign out', icon: 'log-out-outline', onPress: () => signOut() }]}
-          onClose={() => setSettings(null)}
-        />
-      )}
-    </View>
-  );
-}
-
-function SectionTab({ label, active, onPress, children }: { label: string; active: boolean; onPress: () => void; children: React.ReactNode }) {
-  return (
-    <Pressable
-      style={s.tab}
-      onPress={onPress}
-      accessibilityRole="tab"
-      accessibilityLabel={label}
-      accessibilityState={{ selected: active }}
-    >
-      {children}
-      <View style={[s.underline, active && s.underlineOn]} />
     </Pressable>
   );
 }
 
-function PinnedCard({ route, onUnpin }: { route: SavedRoute; onUnpin: () => void }) {
-  const [width, setWidth] = useState(0);
-  const sketchW = width - 32;
-  return (
-    <View style={s.pinCard} onLayout={(e) => setWidth(e.nativeEvent.layout.width)}>
-      <View style={[s.pinSketch, { height: Math.max(sketchW * 0.7, 120) }]}>
-        {sketchW > 0 && <RouteSketch points={route.points} width={sketchW} height={sketchW * 0.7} />}
-      </View>
-      <Pressable style={s.unpin} onPress={onUnpin} hitSlop={8} accessibilityLabel={`Unpin ${route.name}`}>
-        <Ionicons name="close" size={18} color={colors.primary} />
-      </Pressable>
-      <Text style={s.actName} numberOfLines={1}>{route.name}</Text>
-      <Text style={s.date}>{formatDateTime(route.createdAt)}</Text>
-      <Stats route={route} />
-    </View>
-  );
-}
-
-/** " · Uploaded" and so on for "Save & Challenge" routes; nothing for routes kept on the phone. */
-function uploadLabel(route: SavedRoute): string {
-  switch (route.upload?.state) {
-    case 'done':
-      return ' · Uploaded';
-    case 'pending':
-      return ' · Waiting to upload';
-    case 'failed':
-      return ` · Upload failed: ${route.upload.error}`;
-    default:
-      return '';
-  }
-}
-
-function Stats({ route }: { route: SavedRoute }) {
-  return (
-    <View style={s.stats}>
-      <Stat label="Time" value={formatMinSec(route.durationMs)} unit="min" />
-      <Stat label="Distance" value={formatKm(route.distanceMeters)} unit="km" />
-    </View>
-  );
-}
-
-function Stat({ label, value, unit }: { label: string; value: string; unit: string }) {
-  return (
-    <View style={s.stat}>
-      <Text style={s.statLabel}>{label}</Text>
-      <Text style={s.statValue}>
-        {value} <Text style={s.statUnit}>{unit}</Text>
-      </Text>
+  const settings = null;
     </View>
   );
 }
@@ -303,4 +191,3 @@ const s = StyleSheet.create({
   statLabel: { fontSize: 12, color: colors.muted },
   statValue: { fontSize: 15, fontWeight: '700', color: colors.primary },
   statUnit: { fontSize: 12, fontWeight: '500' },
-});

@@ -1,9 +1,11 @@
 import bcrypt from "bcryptjs";
 import cors from "cors";
 import "dotenv/config"; // must stay first so db.ts can read process.env
+import crypto from "node:crypto";
 import type { NextFunction, Request, Response } from "express";
 import express from "express";
 import jwt from "jsonwebtoken";
+import nodemailer from "nodemailer";
 import { pool } from "./db";
 import { routesRouter } from "./routes";
 
@@ -18,6 +20,12 @@ const port = Number(process.env.PORT) || 4000;
 app.use(cors());
 // The default 100 KB limit is too small for a long recording: about 70 bytes per GPS point, one point per second
 app.use(express.json({ limit: "5mb" }));
+
+// Log every request so you can see whether the phone reaches the server.
+app.use((req, _res, next) => {
+  console.log(new Date().toISOString(), req.method, req.url);
+  next();
+});
 
 type UserRow = {
   id: number;
@@ -125,6 +133,96 @@ app.use((err: any, req: Request, res: Response, next: NextFunction) => {
   res.status(500).json({ error: "Server error." });
 });
 
-app.listen(port, () => {
+// ---------- password reset ----------
+
+const hashCode = (email: string, code: string) =>
+  crypto.createHash("sha256").update(`${email}:${code}:${JWT_SECRET}`).digest("hex");
+
+// Email is optional. Without SMTP_* in server/.env the code is printed in this terminal instead.
+const smtpReady = Boolean(process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS);
+const mailer = smtpReady
+  ? nodemailer.createTransport({
+      host: process.env.SMTP_HOST,
+      port: Number(process.env.SMTP_PORT) || 587,
+      secure: Number(process.env.SMTP_PORT) === 465,
+      auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
+      connectionTimeout: 10_000,
+      socketTimeout: 10_000,
+    })
+  : null;
+
+async function sendResetEmail(to: string, code: string) {
+  if (!mailer) {
+    console.log(`[dev] SMTP not configured. Reset code for ${to}: ${code}`);
+    return;
+  }
+  await mailer.sendMail({
+    from: process.env.SMTP_FROM || process.env.SMTP_USER,
+    to,
+    subject: "Your Ghost Racer reset code",
+    text: `Your reset code is ${code}. It expires in 15 minutes. If you didn't ask for this, ignore this email.`,
+  });
+}
+
+app.post("/auth/forgot-password", async (req: Request, res: Response) => {
+  const email = String(req.body?.email ?? "").trim().toLowerCase();
+  res.json({ ok: true }); // always succeed, so emails can't be probed
+  if (!email) return;
+  try {
+    const { rows } = await pool.query<UserRow>("SELECT * FROM users WHERE email = $1", [email]);
+    if (!rows[0]) return;
+    const code = String(crypto.randomInt(100000, 1000000));
+    await pool.query(
+      `INSERT INTO password_resets (user_id, code_hash, expires_at, attempts)
+       VALUES ($1, $2, now() + interval '15 minutes', 0)
+       ON CONFLICT (user_id) DO UPDATE
+         SET code_hash = EXCLUDED.code_hash, expires_at = EXCLUDED.expires_at, attempts = 0`,
+      [rows[0].id, hashCode(email, code)]
+    );
+    await sendResetEmail(email, code);
+  } catch (e) {
+    console.error("POST /auth/forgot-password failed:", e);
+  }
+});
+
+app.post("/auth/reset-password", async (req: Request, res: Response) => {
+  const email = String(req.body?.email ?? "").trim().toLowerCase();
+  const code = String(req.body?.code ?? "").trim();
+  const password = String(req.body?.password ?? "");
+  if (!email || !code || !password) {
+    return res.status(400).json({ error: "Email, code and password are required." });
+  }
+  if (password.length < 6) {
+    return res.status(400).json({ error: "Password should be at least 6 characters." });
+  }
+  try {
+    const { rows } = await pool.query(
+      `SELECT u.id, r.code_hash
+         FROM users u JOIN password_resets r ON r.user_id = u.id
+        WHERE u.email = $1 AND r.expires_at > now() AND r.attempts < 5`,
+      [email]
+    );
+    const row = rows[0];
+    const expected: string = row?.code_hash ?? "";
+    const given = hashCode(email, code);
+    const ok =
+      Boolean(row) &&
+      expected.length === given.length &&
+      crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(given));
+    if (!ok) {
+      if (row) await pool.query("UPDATE password_resets SET attempts = attempts + 1 WHERE user_id = $1", [row.id]);
+      return res.status(400).json({ error: "Invalid or expired code" });
+    }
+    const hash = await bcrypt.hash(password, 10);
+    await pool.query("UPDATE users SET password_hash = $1 WHERE id = $2", [hash, row.id]);
+    await pool.query("DELETE FROM password_resets WHERE user_id = $1", [row.id]);
+    res.json({ ok: true });
+  } catch (e) {
+    console.error("POST /auth/reset-password failed:", e);
+    res.status(500).json({ error: "Server error." });
+  }
+});
+
+app.listen(port, "0.0.0.0", () => {
   console.log(`Server is running on port ${port}`);
 });
