@@ -29,8 +29,12 @@ export interface GhostMapProps {
   center?: LatLng | null;
   /** Route polyline to draw. */
   path?: LatLng[];
+  /** Route being raced; drawn beneath `path`. */
+  ghostPath?: LatLng[];
   /** Current ghost position during a race. */
   ghostPosition?: LatLng;
+  /** Open the camera fitted to these points instead of on `center`. */
+  initialBounds?: LatLng[];
   /** Draw the user's location dot. */
   showUser?: boolean;
   /** Zoom the camera to fit the whole path instead of following the user. */
