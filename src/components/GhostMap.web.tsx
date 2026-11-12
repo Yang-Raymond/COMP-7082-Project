@@ -9,10 +9,11 @@ import type { GhostMapProps } from '../types/map';
 
 /**
  * Renders a themed placeholder with the center coordinates; map props are otherwise ignored.
- * Exposes the same `ref` handle as the native map, with `recenter` as a no-op.
+ * Exposes the same `ref` handle as the native map, with `recenter` and `fitTo` as no-ops.
+ * Pins, `ghostPath`, `ghostPosition` and `initialBounds` are ignored.
  */
 export default function GhostMap({ center, ref }: GhostMapProps) {
-  useImperativeHandle(ref, () => ({ recenter: () => {} }), []);
+  useImperativeHandle(ref, () => ({ recenter: () => {}, fitTo: () => {} }), []);
   return (
     <View style={styles.box}>
       <Text style={styles.title}>Map available on iOS/Android</Text>
