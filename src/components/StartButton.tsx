@@ -1,14 +1,15 @@
-
-import React, { useEffect, useRef } from 'react';
+// Large pulsing Start button that sits on top of the record panel.
+import React, { useEffect, useRef, useState } from 'react';
 import { Animated, Easing, Platform, Pressable, StyleSheet, Text } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../constants/ghostTheme';
 
 const useNative = Platform.OS !== 'web';
 
+/** Start button with an idle breathing ring and hover/press spring feedback. */
 export default function StartButton({ onPress }: { onPress: () => void }) {
-  const scale = useRef(new Animated.Value(1)).current;
-  const pulse = useRef(new Animated.Value(0)).current;
+  const [scale] = useState(() => new Animated.Value(1));
+  const [pulse] = useState(() => new Animated.Value(0));
   const hovered = useRef(false);
 
   // Gentle breathing ring while idle

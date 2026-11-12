@@ -1,34 +1,28 @@
-import { useCallback, useRef, useState } from 'react';
-import { GpsTracker } from '../services/gpsTracker';
-import { computeGhostDelta } from '../services/ghostCompare';
-import { GhostDelta, SavedRoute } from '../types/route';
-import { GpsFix } from '../types/gps';
+// Ghost race state: derives the ghost's current position and the user's ahead/behind delta
+// from the shared route recorder's clock. Opens no GPS watch or timer of its own.
+import { useMemo } from 'react';
+import { computeGhostDelta, ghostPositionAt } from '../services/ghostCompare';
+import { GhostDelta, RoutePoint, SavedRoute } from '../types/route';
+import type { LatLng } from '../types/map';
 
-export function useGhostRace(route: SavedRoute) {
-  const [racing, setRacing] = useState(false);
-  const [current, setCurrent] = useState<GpsFix | null>(null);
-  const [delta, setDelta] = useState<GhostDelta | null>(null);
-  const trackerRef = useRef(new GpsTracker());
-  const startTimeRef = useRef<number>(0);
+/**
+ * Computes the ghost marker position and live delta. `elapsedMs` and `userPoints[].t` must be
+ * the recorder's active clock (pauses excluded), the same clock the saved route's points use.
+ * `ghostPosition` is the route interpolated at `elapsedMs`. `delta` compares the user's latest
+ * accepted point to the ghost and is null until the user has a point.
+ */
+export function useGhostRace(
+  route: SavedRoute,
+  userPoints: RoutePoint[],
+  elapsedMs: number
+): { ghostPosition: LatLng | null; delta: GhostDelta | null } {
+  const ghostPosition = useMemo(() => ghostPositionAt(route.points, elapsedMs), [route.points, elapsedMs]);
 
-  const start = useCallback(async () => {
-    startTimeRef.current = Date.now();
-    setRacing(true);
+  const lastUser = userPoints[userPoints.length - 1];
+  const delta = useMemo(
+    () => (lastUser ? computeGhostDelta(route, lastUser.lat, lastUser.lng, lastUser.t) : null),
+    [route, lastUser],
+  );
 
-    await trackerRef.current.start(
-      (fix) => {
-        setCurrent(fix);
-        const elapsedMs = Date.now() - startTimeRef.current;
-        setDelta(computeGhostDelta(route, fix.lat, fix.lng, elapsedMs));
-      },
-      (message) => console.warn('Race GPS error:', message)
-    );
-  }, [route]);
-
-  const stop = useCallback(() => {
-    trackerRef.current.stop();
-    setRacing(false);
-  }, []);
-
-  return { racing, current, delta, start, stop };
+  return { ghostPosition, delta };
 }

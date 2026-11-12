@@ -1,11 +1,11 @@
 
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
-import type { Session, User } from '@supabase/supabase-js';
+import React, { createContext, useCallback, useContext, useMemo, useState } from 'react';
+import type { AuthUser, Session } from './auth';
 import { useAuth } from './useAuth';
 
 interface AuthContextValue {
   session: Session | null;
-  user: User | null;
+  user: AuthUser | null;
   isSignedIn: boolean;
  
   canChallenge: boolean;
@@ -37,11 +37,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     [canChallenge]
   );
 
-  // Signing in closes any open prompt
-  useEffect(() => {
-    if (isSignedIn) setPrompt(null);
-  }, [isSignedIn]);
-
   const value = useMemo<AuthContextValue>(
     () => ({
       session,
@@ -51,7 +46,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       loading,
       configured,
       requireAuth,
-      prompt,
+      // Signing in hides any open prompt
+      prompt: isSignedIn ? null : prompt,
       dismissPrompt: () => setPrompt(null),
     }),
     [session, isSignedIn, canChallenge, loading, configured, requireAuth, prompt]

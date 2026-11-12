@@ -1,13 +1,17 @@
 import React, { useEffect, useState } from 'react';
-import { View, ActivityIndicator, Platform } from 'react-native';
+import { View, ActivityIndicator, AppState, Platform } from 'react-native';
 import TabBar, { Tab } from './TabBar';
 import HomeScreen from '../screens/HomeScreen';
 import RecordScreen from '../screens/RecordScreen';
 import RaceScreen from '../screens/RaceScreen';
-import PlaceholderScreen from '../screens/PlaceholderScreen';
+import FriendsScreen from '../screens/FriendsScreen';
 import YouScreen from '../screens/YouScreen';
+import OnboardingScreen from '../screens/OnboardingScreen';
 import { AuthProvider, SignInPrompt, useAuthContext } from '../auth';
+import { LocationProvider } from '../hooks/useCurrentPosition';
 import { RouteDraft, useRouteRecorder } from '../hooks/useRouteRecorder';
+import { setUploadAccount, uploadPendingRoutes } from '../services/routeSync';
+import { hasOnboarded, markOnboarded } from '../services/storage';
 import { SavedRoute } from '../types/route';
 import { colors } from '../constants/ghostTheme';
 
@@ -33,7 +37,9 @@ function PhoneFrame({ children }: { children: React.ReactNode }) {
 export default function AppShell() {
   return (
     <AuthProvider>
-      <Shell />
+      <LocationProvider>
+        <Shell />
+      </LocationProvider>
     </AuthProvider>
   );
 }
@@ -43,23 +49,52 @@ function Shell() {
   const [tab, setTab] = useState<Tab>('home');
   const [returnTab, setReturnTab] = useState<Tab | null>(null); 
   const [raceRoute, setRaceRoute] = useState<SavedRoute | null>(null);
+  const [onboarded, setOnboarded] = useState<boolean | null>(null);
   
   const rec = useRouteRecorder();
   const [draft, setDraft] = useState<RouteDraft | null>(null);
 
   useEffect(() => {
-    if (session && returnTab) {
-      setTab(returnTab);
-      setReturnTab(null);
-    }
-  }, [session, returnTab]);
+    hasOnboarded().then(setOnboarded).catch(() => setOnboarded(true));
+  }, []);
 
-  if (loading) {
+  // Upload any "Save & Challenge" routes still waiting (saved while offline, or before the server was reachable):
+  // when the app starts signed in, when someone signs in, and whenever the app comes back to the foreground
+  // (iPhones usually resume the app rather than restart it)
+  useEffect(() => {
+    setUploadAccount(session);
+    if (session) uploadPendingRoutes().catch(() => {});
+  }, [session]);
+
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') uploadPendingRoutes().catch(() => {});
+    });
+    return () => sub.remove();
+  }, []);
+
+  const finishOnboarding = () => {
+    markOnboarded();
+    setOnboarded(true);
+  };
+
+  // After signing in from a prompt, show the tab the user was on before being sent to sign in.
+  const activeTab = session && returnTab ? returnTab : tab;
+
+  if (loading || onboarded === null) {
     return (
       <PhoneFrame>
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
           <ActivityIndicator color={colors.primary} size="large" />
         </View>
+      </PhoneFrame>
+    );
+  }
+
+  if (!onboarded && !session) {
+    return (
+      <PhoneFrame>
+        <OnboardingScreen onDone={finishOnboarding} />
       </PhoneFrame>
     );
   }
@@ -71,7 +106,7 @@ function Shell() {
   };
 
   const goSignIn = () => {
-    setReturnTab(tab);
+    setReturnTab(activeTab);
     dismissPrompt();
     setRaceRoute(null);
     setTab('you');
@@ -81,22 +116,25 @@ function Shell() {
   if (raceRoute) {
     
     content = <RaceScreen route={raceRoute} rec={rec} onExit={() => setRaceRoute(null)} />;
-  } else if (tab === 'home') {
+  } else if (activeTab === 'home') {
     content = (
       <HomeScreen onRace={(r) => requireAuth('Sign in to race this challenge.', () => setRaceRoute(r))} />
     );
-  } else if (tab === 'record') {
+  } else if (activeTab === 'record') {
     content = <RecordScreen rec={rec} draft={draft} onDraft={setDraft} onSaved={() => changeTab('home')} />;
-  } else if (tab === 'social') {
-    content = <PlaceholderScreen title="Social" />;
+  } else if (activeTab === 'friends') {
+    content = <FriendsScreen onSignIn={goSignIn} />;
   } else {
     content = <YouScreen />;
   }
 
+  // Recording, reviewing a run and racing are full-screen in the Figma
+  const fullScreen = rec.status !== 'idle' || draft !== null || raceRoute !== null;
+
   return (
     <PhoneFrame>
       <View style={{ flex: 1 }}>{content}</View>
-      <TabBar tab={tab} onChange={changeTab} />
+      {!fullScreen && <TabBar tab={activeTab} onChange={changeTab} />}
       {prompt && <SignInPrompt reason={prompt.reason} onSignIn={goSignIn} onCancel={dismissPrompt} />}
     </PhoneFrame>
   );
