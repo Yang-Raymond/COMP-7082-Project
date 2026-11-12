@@ -4,13 +4,13 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, shadow } from '../constants/ghostTheme';
 
-export type Tab = 'home' | 'record' | 'social' | 'you';
+export type Tab = 'home' | 'record' | 'friends' | 'you';
 type IconName = React.ComponentProps<typeof Ionicons>['name'];
 
 const TABS: { key: Tab; label: string; icon: IconName; active: IconName }[] = [
   { key: 'home', label: 'Home', icon: 'home-outline', active: 'home' },
   { key: 'record', label: 'Record', icon: 'radio-button-on-outline', active: 'radio-button-on' },
-  { key: 'social', label: 'Social', icon: 'people-outline', active: 'people' },
+  { key: 'friends', label: 'Friends', icon: 'people-outline', active: 'people' },
   { key: 'you', label: 'You', icon: 'person-outline', active: 'person' },
 ];
 

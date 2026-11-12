@@ -60,6 +60,7 @@ export default function RecordDoneScreen({ draft, onSave, onSaveAndChallenge, on
         placeholderTextColor={colors.muted}
         value={name}
         onChangeText={setName}
+        maxLength={100} // the server's limit for route names
       />
 
       <View style={{ flex: 1 }} />

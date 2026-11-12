@@ -8,9 +8,11 @@
     "scheme": "ghostracer",
     "userInterfaceStyle": "automatic",
     "ios": {
-      "icon": "./assets/expo.icon"
+      "icon": "./assets/expo.icon",
+      "bundleIdentifier": "com.darealiferatsteam.GhostRacer"
     },
     "android": {
+      "package": "com.darealiferatsteam.GhostRacer",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
@@ -18,6 +20,7 @@
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
+      "blockedPermissions": ["android.permission.CAMERA"],
       "package": "com.darealiferatsteam.GhostRacer"
     },
     "web": {
@@ -34,8 +37,30 @@
           "imageWidth": 76
         }
       ],
+      "expo-secure-store",
+      "expo-font",
+      "expo-image",
+      "expo-status-bar",
+      "expo-web-browser",
       "@rnmapbox/maps",
-      "expo-secure-store"
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow GhostRacer to use your photos so you can choose a profile picture.",
+          "cameraPermission": "Allow GhostRacer to use the camera for your profile photo.",
+          "microphonePermission": false
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Allow GhostRacer to access your location while you are using the app.",
+          "locationAlwaysAndWhenInUsePermission": "Allow GhostRacer to access your location even when you are not using the app.",
+          "isIosBackgroundLocationEnabled": true,
+          "isAndroidBackgroundLocationEnabled": true,
+          "isAndroidForegroundServiceEnabled": true
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,
