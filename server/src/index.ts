@@ -120,19 +120,6 @@ app.get("/auth/me", async (req: Request, res: Response) => {
 
 app.use("/routes", routesRouter);
 
-// Errors no handler caught (bad JSON, a body over the size limit, ...): answer in JSON like every other
-// error, instead of Express's HTML page with a stack trace
-app.use((err: any, req: Request, res: Response, next: NextFunction) => {
-  if (res.headersSent) return next(err);
-  if (err?.type === "entity.parse.failed") return res.status(400).json({ error: "The request body is not valid JSON." });
-  if (err?.type === "entity.too.large") return res.status(413).json({ error: "The upload is too large." });
-  if (err?.status >= 400 && err.status < 500) {
-    return res.status(err.status).json({ error: err.expose ? err.message : "Bad request." });
-  }
-  console.error(`${req.method} ${req.path} failed:`, err);
-  res.status(500).json({ error: "Server error." });
-});
-
 // ---------- password reset ----------
 
 const hashCode = (email: string, code: string) =>
@@ -221,6 +208,19 @@ app.post("/auth/reset-password", async (req: Request, res: Response) => {
     console.error("POST /auth/reset-password failed:", e);
     res.status(500).json({ error: "Server error." });
   }
+});
+
+// Errors no handler caught (bad JSON, a body over the size limit, ...): answer in JSON like every other
+// error, instead of Express's HTML page with a stack trace. Keep this after every route.
+app.use((err: any, req: Request, res: Response, next: NextFunction) => {
+  if (res.headersSent) return next(err);
+  if (err?.type === "entity.parse.failed") return res.status(400).json({ error: "The request body is not valid JSON." });
+  if (err?.type === "entity.too.large") return res.status(413).json({ error: "The upload is too large." });
+  if (err?.status >= 400 && err.status < 500) {
+    return res.status(err.status).json({ error: err.expose ? err.message : "Bad request." });
+  }
+  console.error(`${req.method} ${req.path} failed:`, err);
+  res.status(500).json({ error: "Server error." });
 });
 
 app.listen(port, "0.0.0.0", () => {
