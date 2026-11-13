@@ -33,6 +33,16 @@ const store = {
 const listeners = new Set<(s: Session | null) => void>();
 const notify = (s: Session | null) => listeners.forEach((cb) => cb(s));
 
+class AuthApiError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+    readonly retryAfterSeconds: number | null
+  ) {
+    super(message);
+  }
+}
+
 async function api<T>(path: string, body?: unknown, token?: string): Promise<T> {
   if (!API_URL) throw new Error('Login is not configured. Add EXPO_PUBLIC_API_URL to your .env file.');
   const controller = new AbortController();
@@ -48,9 +58,17 @@ async function api<T>(path: string, body?: unknown, token?: string): Promise<T> 
       signal: controller.signal,
     });
     const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(data.error ?? `Request failed (${res.status})`);
+    if (!res.ok) {
+      const retryAfter = Number(res.headers.get('Retry-After'));
+      throw new AuthApiError(
+        data.error ?? `Request failed (${res.status})`,
+        res.status,
+        Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter : null
+      );
+    }
     return data as T;
   } catch (e) {
+    if (e instanceof AuthApiError) throw e;
     const msg = controller.signal.aborted ? 'Request timed out' : e instanceof Error ? e.message : String(e);
     throw new Error(`${msg} [${API_URL}${path}]`);
   } finally {
@@ -116,6 +134,14 @@ export async function resetPassword(email: string, code: string, newPassword: st
 }
 
 export function friendlyAuthError(e: unknown): string {
+  if (e instanceof AuthApiError && e.status === 429) {
+    if (e.retryAfterSeconds === null) return 'Too many attempts. Please wait a moment and try again.';
+    const wait = e.retryAfterSeconds >= 60
+      ? `${Math.ceil(e.retryAfterSeconds / 60)} minute${Math.ceil(e.retryAfterSeconds / 60) === 1 ? '' : 's'}`
+      : `${e.retryAfterSeconds} second${e.retryAfterSeconds === 1 ? '' : 's'}`;
+    return `Too many attempts. Please try again in ${wait}.`;
+  }
+
   const msg = e instanceof Error ? e.message : String(e);
   const m = msg.toLowerCase();
   if (m.includes('invalid login credentials')) return 'Wrong email or password.';
