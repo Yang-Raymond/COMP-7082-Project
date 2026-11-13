@@ -1,20 +1,20 @@
 // Home screen: map with a search bar and activity filters, plus a bottom sheet listing nearby challenges.
 // Every listed route gets a pin at its start. Tapping a pin or card selects the route (draws it and zooms to fit).
-import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { View, Text, TextInput, Pressable, Platform, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useAuthContext } from '../auth';
+import BottomSheet from '../components/BottomSheet';
 import GhostMap from '../components/GhostMap';
 import LocationButton from '../components/LocationButton';
-import type { GhostMapHandle } from '../types/map';
-import BottomSheet from '../components/BottomSheet';
 import RouteSketch from '../components/RouteSketch';
-import { useAuthContext } from '../auth';
-import { useCurrentPosition } from '../hooks/useCurrentPosition';
-import { getRoutes, deleteRoute } from '../services/storage';
-import { formatKm, formatMinSec } from '../services/format';
-import { formatDistance, haversineDistance } from '../services/distance';
 import { colors, shadow } from '../constants/ghostTheme';
+import { useCurrentPosition } from '../hooks/useCurrentPosition';
+import { formatDistance, haversineDistance } from '../services/distance';
+import { formatKm, formatMinSec } from '../services/format';
+import { deleteRoute, getRoutes } from '../services/storage';
+import type { GhostMapHandle } from '../types/map';
 import { ActivityType, SavedRoute } from '../types/route';
 
 
@@ -43,7 +43,7 @@ export default function HomeScreen({ onRace }: { onRace: (r: SavedRoute) => void
   const [routes, setRoutes] = useState<SavedRoute[]>([]);
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<ActivityType | null>(null);
-  const [publicOnly, setPublicOnly] = useState(false); 
+  const [publicOnly, setPublicOnly] = useState(false);
   const { position, isLive } = useCurrentPosition();
 
   useEffect(() => {
@@ -115,11 +115,15 @@ export default function HomeScreen({ onRace }: { onRace: (r: SavedRoute) => void
         />
         <Ionicons name="search" size={20} color={colors.primary} />
       </View>
-      <View style={s.chips}>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={s.chips}
+      >
         <Chip label="Biking Tracks" icon="bicycle" on={filter === 'bike'} onPress={() => setFilter(filter === 'bike' ? null : 'bike')} />
         <Chip label="Running Tracks" icon="walk" on={filter === 'run'} onPress={() => setFilter(filter === 'run' ? null : 'run')} />
         <Chip label="Public" icon="globe-outline" on={publicOnly} onPress={() => setPublicOnly(!publicOnly)} />
-      </View>
+      </ScrollView>
     </>
   );
 
@@ -198,7 +202,7 @@ const s = StyleSheet.create({
   top: { position: 'absolute', top: 0, left: 0, right: 0, paddingHorizontal: 16, gap: 10 },
   search: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.bg, borderRadius: 28, paddingHorizontal: 20, height: 50 },
   searchInput: { flex: 1, fontSize: 15, color: colors.text },
-  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  chips: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   chip: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: colors.bg, borderRadius: 18, paddingHorizontal: 12, paddingVertical: 7, borderWidth: 1, borderColor: colors.border },
   chipOn: { backgroundColor: colors.chipActive, borderColor: colors.primary },
   chipText: { fontSize: 12, color: colors.text, ...noSelect },
