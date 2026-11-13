@@ -7,6 +7,7 @@ import express from "express";
 import jwt from "jsonwebtoken";
 import nodemailer from "nodemailer";
 import { pool } from "./db";
+import { clearLoginFailures, loginRateLimit, recordLoginFailure } from "./loginRateLimit";
 import { routesRouter } from "./routes";
 
 const JWT_SECRET = process.env.JWT_SECRET;
@@ -17,7 +18,7 @@ if (!JWT_SECRET) {
 const app = express();
 const port = Number(process.env.PORT) || 4000;
 
-app.use(cors());
+app.use(cors({ exposedHeaders: ["Retry-After"] }));
 // The default 100 KB limit is too small for a long recording: about 70 bytes per GPS point, one point per second
 app.use(express.json({ limit: "5mb" }));
 
@@ -84,7 +85,7 @@ app.post("/auth/signup", async (req: Request, res: Response) => {
   }
 });
 
-app.post("/auth/login", async (req: Request, res: Response) => {
+app.post("/auth/login", loginRateLimit, async (req: Request, res: Response) => {
   const { email, password } = req.body ?? {};
   if (!email || !password) {
     return res.status(400).json({ error: "Email and password are required." });
@@ -93,7 +94,11 @@ app.post("/auth/login", async (req: Request, res: Response) => {
     const { rows } = await pool.query<UserRow>("SELECT * FROM users WHERE email = lower($1)", [String(email).trim()]);
     const user = rows[0];
     const ok = user && (await bcrypt.compare(String(password), user.password_hash));
-    if (!ok) return res.status(401).json({ error: "Invalid login credentials" });
+    if (!ok) {
+      recordLoginFailure(email);
+      return res.status(401).json({ error: "Invalid login credentials" });
+    }
+    clearLoginFailures(email);
     res.json({ token: makeToken(user), user: publicUser(user) });
   } catch (e) {
     console.error("POST /auth/login failed:", e);
