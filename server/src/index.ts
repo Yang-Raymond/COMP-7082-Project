@@ -7,7 +7,7 @@ import express from "express";
 import jwt from "jsonwebtoken";
 import nodemailer from "nodemailer";
 import { pool } from "./db";
-import { clearLoginFailures, loginRateLimit, recordLoginFailure } from "./loginRateLimit";
+import { clearLoginFailures, loginRateLimit, passwordResetRequestRateLimit, recordLoginFailure } from "./rateLimits";
 import { routesRouter } from "./routes";
 
 const JWT_SECRET = process.env.JWT_SECRET;
@@ -156,7 +156,7 @@ async function sendResetEmail(to: string, code: string) {
   });
 }
 
-app.post("/auth/forgot-password", async (req: Request, res: Response) => {
+app.post("/auth/forgot-password", passwordResetRequestRateLimit, async (req: Request, res: Response) => {
   const email = String(req.body?.email ?? "").trim().toLowerCase();
   res.json({ ok: true }); // always succeed, so emails can't be probed
   if (!email) return;
