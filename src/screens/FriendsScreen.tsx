@@ -160,25 +160,7 @@ export default function FriendsScreen({ onSignIn }: { onSignIn: () => void }) {
         />
       </View>
 
-      {/* <View style={[s.search, { marginTop: 4 }]}>
-        <Ionicons name="person-add-outline" size={22} color={colors.primary} />
-        <TextInput
-          style={s.searchInput}
-          placeholder="Add friend by username"
-          placeholderTextColor={colors.muted}
-          value={newName}
-          onChangeText={setNewName}
-          onSubmitEditing={submitNewFriend}
-          returnKeyType="send"
-          autoCapitalize="none"
-          autoCorrect={false}
-        />
-        {newName.trim().length > 0 && (
-          <Pressable hitSlop={8} onPress={submitNewFriend} accessibilityLabel="Send friend request">
-            <Ionicons name="send" size={20} color={colors.primary} />
-          </Pressable>
-        )}
-      </View> */}
+      
 
       <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 16 }}>
         {showRequests && (
