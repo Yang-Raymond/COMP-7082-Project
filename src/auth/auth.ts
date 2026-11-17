@@ -94,6 +94,14 @@ export async function getSession(): Promise<Session | null> {
   }
 }
 
+/** Calls the server with the saved login token. Used by features that need a logged-in user (friends, ...).
+ *  Pass a body to make a POST; leave it out for a GET. */
+export async function authedApi<T>(path: string, body?: unknown): Promise<T> {
+  const token = await store.get(TOKEN_KEY);
+  if (!token) throw new Error('Please log in first.');
+  return api<T>(path, body, token);
+}
+
 export function onAuthChange(callback: (session: Session | null) => void): () => void {
   listeners.add(callback);
   return () => {

@@ -2,6 +2,9 @@
 // creator's run with its per-point times, so the route can be raced as a ghost later.
 // Uploads are safe to retry: the phone sends its own clientId (a UUID), and sending the same one twice
 // returns the route that's already saved instead of making a copy (sequence diagram 6).
+//
+// Visibility: a route is 'public' (everyone with the app can see it) or 'private' (its creator and the
+// creator's accepted friends). Every endpoint that returns a route by id must use CAN_SEE below.
 import { Router, type Request, type Response } from "express";
 import type { PoolClient } from "pg";
 import { pool } from "./db";
@@ -13,12 +16,31 @@ routesRouter.use(requireUser);
 const ACTIVITIES = ["run", "bike"] as const;
 type Activity = (typeof ACTIVITIES)[number];
 
+const VISIBILITIES = ["public", "private"] as const;
+type Visibility = (typeof VISIBILITIES)[number];
+
 const MAX_POINTS = 20_000; // about 5.5 hours at one GPS fix per second
 const MAX_DURATION_MS = 2_147_483_647; // runs.duration_ms and run_points.t_ms are INTEGER
 const MAX_DISTANCE_M = 10_000_000; // 10,000 km; anything bigger is a bug, and REAL columns overflow near 3.4e38
 const MAX_ELEVATION_GAIN_M = 100_000;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const CONTROL_CHARS = /[\u0000-\u001F\u007F]/; // Postgres rejects \u0000, and the rest have no place in a route name
+
+/**
+ * SQL condition: the user whose id is in $2 may see route r.
+ * Mine, or public, or made by someone I'm friends with (an accepted request; a pending one doesn't count).
+ * Because it runs on every request, removing a friend hides their private routes again right away.
+ */
+const CAN_SEE = `(
+  r.creator_id = $2
+  OR r.visibility = 'public'
+  OR EXISTS (
+    SELECT 1 FROM friendships f
+    WHERE f.status = 'accepted'
+      AND ((f.requester_id = $2 AND f.addressee_id = r.creator_id)
+        OR (f.addressee_id = $2 AND f.requester_id = r.creator_id))
+  )
+)`;
 
 /** The same shape as SavedRoute in the app (src/types/route.ts), plus the ids the server knows it by. */
 interface RouteOut {
@@ -31,12 +53,14 @@ interface RouteOut {
   durationMs: number;
   elevationGainMeters?: number;
   activity: Activity;
+  visibility: Visibility;
 }
 
 interface RouteIn {
   clientId: string;
   name: string;
   activity: Activity;
+  visibility: Visibility;
   createdAt: number;
   durationMs: number;
   distanceMeters: number;
@@ -51,7 +75,17 @@ const isNum = (v: unknown): v is number => typeof v === "number" && Number.isFin
 
 /** Checks a POST /routes body. Returns what's wrong, or the values ready for the database. */
 function parseRoute(body: any): { error: string } | { route: RouteIn } {
-  const { clientId, name, activity = "run", createdAt, durationMs, distanceMeters, elevationGainMeters, points } = body ?? {};
+  const {
+    clientId,
+    name,
+    activity = "run",
+    visibility = "private", // an old app that doesn't send it gets the safe default
+    createdAt,
+    durationMs,
+    distanceMeters,
+    elevationGainMeters,
+    points,
+  } = body ?? {};
 
   if (typeof clientId !== "string" || !UUID.test(clientId)) return { error: "clientId must be a UUID." };
   const cleanName = typeof name === "string" ? name.trim() : "";
@@ -59,6 +93,7 @@ function parseRoute(body: any): { error: string } | { route: RouteIn } {
     return { error: "name must be 1 to 100 characters of plain text." };
   }
   if (!ACTIVITIES.includes(activity)) return { error: "activity must be \"run\" or \"bike\"." };
+  if (!VISIBILITIES.includes(visibility)) return { error: "visibility must be \"public\" or \"private\"." };
   // Between 2020 and a day from now (a day of slack for a phone clock that's off)
   if (!isNum(createdAt) || createdAt < 1_577_836_800_000 || createdAt > Date.now() + 86_400_000) {
     return { error: "createdAt must be a recent time in milliseconds." };
@@ -100,6 +135,7 @@ function parseRoute(body: any): { error: string } | { route: RouteIn } {
       clientId: clientId.toLowerCase(),
       name: cleanName,
       activity,
+      visibility,
       createdAt,
       durationMs: Math.round(durationMs),
       distanceMeters,
@@ -114,7 +150,7 @@ function parseRoute(body: any): { error: string } | { route: RouteIn } {
 
 // The ghost is the fastest run on the route that isn't flagged. Right after saving, that's the creator's own run.
 const SELECT_ROUTES = `
-  SELECT r.id, r.client_id, r.name, r.activity, r.distance_m, r.elevation_gain_m,
+  SELECT r.id, r.client_id, r.name, r.activity, r.visibility, r.distance_m, r.elevation_gain_m,
          (extract(epoch FROM r.created_at) * 1000)::float8 AS created_ms,
          best.duration_ms,
          COALESCE((SELECT json_agg(json_strip_nulls(json_build_object('lat', p.lat, 'lng', p.lng, 't', p.t_ms, 'alt', p.alt_m))
@@ -133,6 +169,7 @@ type RouteRow = {
   client_id: string;
   name: string;
   activity: Activity;
+  visibility: Visibility;
   distance_m: number;
   elevation_gain_m: number | null;
   created_ms: number;
@@ -150,11 +187,12 @@ const toRouteOut = (r: RouteRow): RouteOut => ({
   durationMs: r.duration_ms,
   ...(r.elevation_gain_m != null ? { elevationGainMeters: r.elevation_gain_m } : {}),
   activity: r.activity,
+  visibility: r.visibility,
 });
 
 async function insertRoute(client: PoolClient, userId: number, r: RouteIn): Promise<number | null> {
   const inserted = await client.query<{ id: number }>(
-    `INSERT INTO routes (client_id, creator_id, name, activity, path, distance_m, elevation_gain_m, area_key, created_at)
+    `INSERT INTO routes (client_id, creator_id, name, activity, path, distance_m, elevation_gain_m, area_key, created_at, visibility)
      VALUES ($1, $2, $3, $4,
              ST_SetSRID(ST_MakeLine(ARRAY(
                SELECT ST_MakePoint(p.lng, p.lat)
@@ -162,10 +200,11 @@ async function insertRoute(client: PoolClient, userId: number, r: RouteIn): Prom
                ORDER BY p.i)), 4326)::geography,
              $7, $8,
              ST_GeoHash(ST_SetSRID(ST_MakePoint($5[1], $6[1]), 4326), 5), -- ~5 km cell around the start, for "nearby"
-             to_timestamp($9::float8 / 1000))
+             to_timestamp($9::float8 / 1000),
+             $10)
      ON CONFLICT (client_id) DO NOTHING
      RETURNING id`,
-    [r.clientId, userId, r.name, r.activity, r.lngs, r.lats, r.distanceMeters, r.elevationGainMeters, r.createdAt]
+    [r.clientId, userId, r.name, r.activity, r.lngs, r.lats, r.distanceMeters, r.elevationGainMeters, r.createdAt, r.visibility]
   );
   if (inserted.rowCount === 0) return null; // this clientId was uploaded before
 
@@ -241,17 +280,39 @@ routesRouter.get("/mine", async (req: Request, res: Response) => {
   }
 });
 
-// GET /routes/:id — one route with its ghost points, for racing it
+// GET /routes/:id — one route with its ghost points, for racing it.
+// Only if it's yours, public, or made by a friend. Anything else answers 404, the same as a route that
+// doesn't exist, so nobody can tell that a private route is there.
 routesRouter.get("/:id", async (req: Request, res: Response) => {
   if (!/^\d{1,9}$/.test(String(req.params.id))) return res.status(404).json({ error: "Route not found." });
   try {
-    const { rows } = await pool.query<RouteRow>(`${SELECT_ROUTES} WHERE r.id = $1 AND r.status = 'active'`, [
-      Number(req.params.id),
-    ]);
+    const { rows } = await pool.query<RouteRow>(
+      `${SELECT_ROUTES} WHERE r.id = $1 AND r.status = 'active' AND ${CAN_SEE}`,
+      [Number(req.params.id), res.locals.userId]
+    );
     if (!rows[0]) return res.status(404).json({ error: "Route not found." });
     res.json(toRouteOut(rows[0]));
   } catch (e) {
     console.error("GET /routes/:id failed:", e);
+    res.status(500).json({ error: "Server error." });
+  }
+});
+
+// POST /routes/:id/visibility — the owner switches a route between public and private. Body: { visibility }.
+// (POST, not PATCH, because the app's api() helper only does GET and POST.)
+routesRouter.post("/:id/visibility", async (req: Request, res: Response) => {
+  if (!/^\d{1,9}$/.test(String(req.params.id))) return res.status(404).json({ error: "Route not found." });
+  const visibility = req.body?.visibility;
+  if (!VISIBILITIES.includes(visibility)) return res.status(400).json({ error: "visibility must be \"public\" or \"private\"." });
+  try {
+    const result = await pool.query(
+      `UPDATE routes SET visibility = $3 WHERE id = $1 AND creator_id = $2 AND status = 'active'`,
+      [Number(req.params.id), res.locals.userId, visibility]
+    );
+    if (result.rowCount === 0) return res.status(404).json({ error: "Route not found." });
+    res.json({ ok: true, visibility });
+  } catch (e) {
+    console.error("POST /routes/:id/visibility failed:", e);
     res.status(500).json({ error: "Server error." });
   }
 });

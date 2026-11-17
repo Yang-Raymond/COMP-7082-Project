@@ -5,7 +5,7 @@ import { saveLastLocation, saveRoute } from '../services/storage';
 import { totalDistance } from '../services/distance';
 import { elevationGain } from '../services/elevation';
 import { makeUuid } from '../services/uuid';
-import { ActivityType, RoutePoint, SavedRoute } from '../types/route';
+import { ActivityType, RoutePoint, RouteVisibility, SavedRoute } from '../types/route';
 
 export type RecorderStatus = 'idle' | 'recording' | 'paused';
 
@@ -122,12 +122,13 @@ export function useRouteRecorder() {
 /**
  * Persists a draft as a SavedRoute and remembers its end point as the last known location.
  * With `upload` and the signed-in account's `ownerId`, the route is also marked to be uploaded;
- * call uploadPendingRoutes() afterwards.
+ * call uploadPendingRoutes() afterwards. `visibility` ('public' or 'private') says who can see an
+ * uploaded route; it defaults to 'private' (the creator and their friends).
  */
 export async function saveDraft(
   draft: RouteDraft,
   name: string,
-  opts: { upload?: boolean; ownerId?: number } = {}
+  opts: { upload?: boolean; ownerId?: number; visibility?: RouteVisibility } = {}
 ): Promise<SavedRoute> {
   // Uploading needs an account, and the server needs at least two points to make a route;
   // otherwise the route just stays on the phone
@@ -141,7 +142,14 @@ export async function saveDraft(
     durationMs: draft.durationMs,
     elevationGainMeters: draft.elevationGainMeters,
     activity: draft.activity,
-    ...(upload ? { clientId: makeUuid(), ownerId: opts.ownerId, upload: { state: 'pending' as const } } : {}),
+    ...(upload
+      ? {
+          clientId: makeUuid(),
+          ownerId: opts.ownerId,
+          visibility: opts.visibility ?? ('private' as const),
+          upload: { state: 'pending' as const },
+        }
+      : {}),
   };
   await saveRoute(route);
   const end = draft.points[draft.points.length - 1];

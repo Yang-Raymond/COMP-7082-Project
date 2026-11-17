@@ -1,6 +1,6 @@
 -- GhostRacer schema (PostgreSQL + PostGIS)
 -- Apply with:
---   psql "host=HOST port=PORT user=avnadmin dbname=ghostracer sslmode=require" -f db/schema.sql
+--   npm run db:setup      (from the server folder)
 
 CREATE EXTENSION IF NOT EXISTS postgis;
 
@@ -71,3 +71,24 @@ ALTER TABLE routes ADD COLUMN IF NOT EXISTS activity VARCHAR(10) NOT NULL DEFAUL
 ALTER TABLE routes ADD COLUMN IF NOT EXISTS elevation_gain_m REAL;
 ALTER TABLE routes ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
 ALTER TABLE run_points ADD COLUMN IF NOT EXISTS alt_m REAL;
+
+-- Route visibility: 'public' = everyone with the app, 'private' = the creator and accepted friends.
+-- Default is private so routes saved before this column existed are not exposed by accident.
+ALTER TABLE routes ADD COLUMN IF NOT EXISTS visibility VARCHAR(10) NOT NULL DEFAULT 'private'
+  CHECK (visibility IN ('public', 'private'));
+CREATE INDEX IF NOT EXISTS idx_routes_visibility ON routes (visibility, activity);
+
+-- Friends. One row per pair, whoever sent the request. Declining or removing deletes the row.
+CREATE TABLE IF NOT EXISTS friendships (
+  id              INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  requester_id    INTEGER NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+  addressee_id    INTEGER NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+  status          VARCHAR(10) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'accepted')),
+  requester_muted BOOLEAN NOT NULL DEFAULT FALSE,
+  addressee_muted BOOLEAN NOT NULL DEFAULT FALSE,
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+  CHECK (requester_id <> addressee_id)
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS uq_friendship_pair
+  ON friendships (LEAST(requester_id, addressee_id), GREATEST(requester_id, addressee_id));

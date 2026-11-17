@@ -1,5 +1,6 @@
 export type ActivityType = 'run' | 'bike';
 
+export type RouteVisibility = 'public' | 'private';
 export interface RoutePoint {
   lat: number;
   lng: number;
@@ -18,12 +19,14 @@ export interface SavedRoute {
   durationMs: number;
   elevationGainMeters?: number;
   activity?: ActivityType;
+  visibility?: RouteVisibility;
   /** Only on "Save & Challenge" routes: a UUID made on the phone, so the server can spot a retried upload. */
   clientId?: string;
   /** Only on "Save & Challenge" routes: the account that saved it. It's only uploaded while that account is signed in. */
   ownerId?: number;
   /** Only on "Save & Challenge" routes. Routes without it stay on this phone. */
   upload?: RouteUpload;
+  
 }
 
 /** Where a "Save & Challenge" route is in being uploaded to the server. */

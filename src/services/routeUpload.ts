@@ -133,6 +133,8 @@ function toUploadBody(r: SavedRoute) {
     clientId: r.clientId,
     name: r.name.replace(CONTROL_CHARS, ' ').trim().slice(0, 100) || 'Route', // the server allows 1 to 100 characters
     activity: r.activity ?? 'run',
+    // Routes saved before the Public/Private choice existed have none, and stay private
+    visibility: r.visibility ?? 'private',
     createdAt: r.createdAt,
     durationMs: r.durationMs,
     distanceMeters: r.distanceMeters,

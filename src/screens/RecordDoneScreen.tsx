@@ -8,11 +8,12 @@ import { RouteDraft } from '../hooks/useRouteRecorder';
 import { formatClock, formatKm } from '../services/format';
 import { useAuthContext } from '../auth';
 import { colors } from '../constants/ghostTheme';
+import type { RouteVisibility } from '../types/route';
 
 interface Props {
   draft: RouteDraft;
   onSave: (name: string) => void;
-  onSaveAndChallenge: (name: string) => void;
+  onSaveAndChallenge: (name: string, visibility: RouteVisibility) => void;
   onDiscard: () => void;
 }
 
@@ -22,6 +23,8 @@ export default function RecordDoneScreen({ draft, onSave, onSaveAndChallenge, on
   const insets = useSafeAreaInsets();
   const defaultName = `${draft.activity === 'bike' ? 'Bike' : 'Run'} · ${new Date().toLocaleDateString()}`;
   const [name, setName] = useState('');
+  // Friends only is the default, so nothing is public unless the user picks it
+  const [visibility, setVisibility] = useState<RouteVisibility>('private');
   const first = draft.points[0];
   const finalName = name.trim() || defaultName;
 
@@ -68,7 +71,32 @@ export default function RecordDoneScreen({ draft, onSave, onSaveAndChallenge, on
       {!canChallenge && (
         <Text style={s.hint}>Sign in to challenge friends. You can still save this run.</Text>
       )}
-      <Pressable style={s.primary} onPress={() => onSaveAndChallenge(finalName)}>
+
+      {/* Who can see this challenge. Only matters for "Save & Challenge"; "Save only" stays on this phone. */}
+      <View style={s.visWrap}>
+        <Text style={s.visLabel}>Who can see this challenge?</Text>
+        <View style={s.vis}>
+          <VisOption
+            icon="people-outline"
+            label="Friends only"
+            active={visibility === 'private'}
+            onPress={() => setVisibility('private')}
+          />
+          <VisOption
+            icon="globe-outline"
+            label="Public"
+            active={visibility === 'public'}
+            onPress={() => setVisibility('public')}
+          />
+        </View>
+        <Text style={s.visHelp}>
+          {visibility === 'public'
+            ? 'Anyone with the app can see and race this route.'
+            : 'Only your friends can see and race this route.'}
+        </Text>
+      </View>
+
+      <Pressable style={s.primary} onPress={() => onSaveAndChallenge(finalName, visibility)}>
         <Text style={s.primaryText}>Save & Challenge</Text>
         <Ionicons name={canChallenge ? 'arrow-forward' : 'lock-closed'} size={20} color={colors.onPrimary} />
       </Pressable>
@@ -84,6 +112,31 @@ export default function RecordDoneScreen({ draft, onSave, onSaveAndChallenge, on
       </View>
       </View>
     </View>
+  );
+}
+
+/** One side of the Friends only / Public switch. */
+function VisOption({
+  icon,
+  label,
+  active,
+  onPress,
+}: {
+  icon: 'people-outline' | 'globe-outline';
+  label: string;
+  active: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      style={[s.visBtn, active && s.visBtnOn]}
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityState={{ selected: active }}
+    >
+      <Ionicons name={icon} size={16} color={colors.primary} />
+      <Text style={s.visText}>{label}</Text>
+    </Pressable>
   );
 }
 
@@ -110,6 +163,13 @@ const s = StyleSheet.create({
   statLabel: { fontSize: 12, color: colors.muted },
   input: { marginTop: 14, borderWidth: 1, borderColor: colors.border, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10, fontSize: 14, color: colors.text },
   hint: { textAlign: 'center', color: colors.muted, fontSize: 13, marginBottom: 10 },
+  visWrap: { marginBottom: 12, alignItems: 'center' },
+  visLabel: { fontSize: 13, fontWeight: '600', color: colors.text, marginBottom: 8 },
+  vis: { flexDirection: 'row', backgroundColor: colors.bg, borderWidth: 1, borderColor: colors.border, borderRadius: 24, padding: 4, gap: 4 },
+  visBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 18, paddingVertical: 9, borderRadius: 20 },
+  visBtnOn: { backgroundColor: colors.lavender },
+  visText: { fontSize: 14, fontWeight: '600', color: colors.text },
+  visHelp: { fontSize: 12, color: colors.muted, marginTop: 8, textAlign: 'center' },
   primary: { height: 60, borderRadius: 30, backgroundColor: colors.primary, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10 },
   primaryText: { color: colors.onPrimary, fontSize: 18, fontWeight: '700' },
   row: { flexDirection: 'row', gap: 12, marginTop: 14 },

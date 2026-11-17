@@ -13,6 +13,7 @@ import { formatClock, formatKm } from '../services/format';
 import { uploadPendingRoutes } from '../services/routeSync';
 import { colors, shadow } from '../constants/ghostTheme';
 import type { GhostMapHandle } from '../types/map';
+import type { RouteVisibility } from '../types/route';
 
 
 /** Recorder state lives in AppShell so a run survives tab switches. */
@@ -41,12 +42,13 @@ export default function RecordScreen({ rec, draft, onDraft, onSaved }: Props) {
   const saving = useRef(false);
 
   // "Save only" keeps the route on this phone. "Save & Challenge" also uploads it so others can race it.
-  const save = async (name: string, upload = false) => {
+  // `visibility` only matters for uploaded routes: 'public' = everyone with the app, 'private' = you and your friends.
+  const save = async (name: string, upload = false, visibility: RouteVisibility = 'private') => {
     // A second tap while the first save is still writing would save (and upload) the run twice
     if (!draft || saving.current) return;
     saving.current = true;
     try {
-      await saveDraft(draft, name, { upload, ownerId: user?.id });
+      await saveDraft(draft, name, { upload, ownerId: user?.id, visibility });
     } finally {
       saving.current = false;
     }
@@ -60,7 +62,9 @@ export default function RecordScreen({ rec, draft, onDraft, onSaved }: Props) {
     return <RecordDoneScreen
       draft={draft}
       onSave={(name) => save(name)}
-      onSaveAndChallenge={(name) => requireAuth('Sign in to challenge your friends.', () => save(name, true))}
+      onSaveAndChallenge={(name, visibility) =>
+        requireAuth('Sign in to challenge your friends.', () => save(name, true, visibility ?? 'private'))
+      }
       onDiscard={() => onDraft(null)}
     />;
   }

@@ -7,6 +7,7 @@ import express from "express";
 import jwt from "jsonwebtoken";
 import nodemailer from "nodemailer";
 import { pool } from "./db";
+import { friendsRouter } from "./friends";
 import { routesRouter } from "./routes";
 
 const JWT_SECRET = process.env.JWT_SECRET;
@@ -116,9 +117,10 @@ app.get("/auth/me", async (req: Request, res: Response) => {
   }
 });
 
-// ---------- routes ----------
+// ---------- routes and friends ----------
 
 app.use("/routes", routesRouter);
+app.use("/friends", friendsRouter);
 
 // Errors no handler caught (bad JSON, a body over the size limit, ...): answer in JSON like every other
 // error, instead of Express's HTML page with a stack trace

@@ -1,14 +1,29 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { View, Text, TextInput, Pressable, ScrollView, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useAuthContext } from '../auth';
 import Avatar from '../components/Avatar';
 import PopoverMenu, { Anchor, MenuItem, ViewRef, measureAnchor } from '../components/PopoverMenu';
 import ProfileHeader from '../components/ProfileHeader';
-import { useAuthContext } from '../auth';
-import { Friend, getFriends, removeFriend, setMuted } from '../services/friends';
-import { confirmAction, showNotice } from '../services/dialog';
 import { colors } from '../constants/ghostTheme';
+import { confirmAction, showNotice } from '../services/dialog';
+import {
+  Friend,
+  FriendRequest,
+  SharedRoute,
+  Suggestion,
+  acceptRequest,
+  cleanError,
+  declineRequest,
+  getFriendRoutes,
+  getFriends,
+  getRequests,
+  getSuggestions,
+  removeFriend,
+  sendRequest,
+  setMuted,
+} from '../services/friends';
 
 /** `onSignIn` opens the sign-in screen and comes back here afterwards. */
 export default function FriendsScreen({ onSignIn }: { onSignIn: () => void }) {
@@ -16,13 +31,46 @@ export default function FriendsScreen({ onSignIn }: { onSignIn: () => void }) {
   const { isSignedIn } = useAuthContext();
   const root = useRef<ViewRef>(null);
   const [friends, setFriends] = useState<Friend[]>([]);
+  const [requests, setRequests] = useState<FriendRequest[]>([]);
+  const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
+  const [showRequests, setShowRequests] = useState(false);
+  const [newName, setNewName] = useState('');
   const [query, setQuery] = useState('');
   const [menu, setMenu] = useState<{ friend: Friend; anchor: Anchor } | null>(null);
   const [viewing, setViewing] = useState<Friend | null>(null);
 
-  useEffect(() => {
-    getFriends().then(setFriends);
+  const refresh = useCallback(async () => {
+    try {
+      // Suggestions are a nice-to-have, so a failure there shouldn't hide the friends list
+      const [f, r, sg] = await Promise.all([getFriends(), getRequests(), getSuggestions().catch(() => [] as Suggestion[])]);
+      setFriends(f);
+      setRequests(r);
+      setSuggestions(sg);
+    } catch (e) {
+      showNotice('Friends', cleanError(e, "Couldn't load friends."));
+    }
   }, []);
+
+  // Runs a server action, then reloads both lists. Errors show as a notice.
+  const run = async (fn: () => Promise<unknown>) => {
+    try {
+      await fn();
+      await refresh();
+    } catch (e) {
+      showNotice('Friends', cleanError(e));
+    }
+  };
+
+  // Load when signed in (also after logging in from this screen); clear when signed out.
+  useEffect(() => {
+    if (!isSignedIn) {
+      setFriends([]);
+      setRequests([]);
+      setSuggestions([]);
+      return;
+    }
+    refresh();
+  }, [isSignedIn, refresh]);
 
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -56,28 +104,39 @@ export default function FriendsScreen({ onSignIn }: { onSignIn: () => void }) {
     {
       label: f.muted ? 'Unmute challenges' : 'Mute challenges',
       icon: f.muted ? 'notifications-outline' : 'notifications-off-outline',
-      onPress: async () => setFriends(await setMuted(f.id, !f.muted)),
+      onPress: () => run(() => setMuted(f.id, !f.muted)),
     },
     {
       label: 'Remove friend',
       icon: 'person-remove-outline',
       separated: true,
       onPress: () =>
-        confirmAction(`Remove ${f.name}?`, "You won't see their challenges any more.", 'Remove', async () =>
-          setFriends(await removeFriend(f.id))
+        confirmAction(`Remove ${f.name}?`, "You won't see their challenges any more.", 'Remove', () =>
+          run(() => removeFriend(f.id))
         ),
     },
   ];
 
+  const submitNewFriend = () => {
+    const name = newName.trim();
+    if (!name) return;
+    run(async () => {
+      await sendRequest(name);
+      setNewName('');
+      showNotice('Friends', 'Request sent.');
+    });
+  };
+
   return (
     <View ref={root} style={[s.root, { paddingTop: insets.top + 8 }]}>
       <View style={s.topRow}>
-        <Pressable
-          hitSlop={8}
-          accessibilityLabel="Notifications"
-          onPress={() => showNotice('Notifications', 'Friend requests and challenge alerts are coming soon.')}
-        >
+        <Pressable hitSlop={8} accessibilityLabel="Friend requests" onPress={() => setShowRequests((v) => !v)}>
           <Ionicons name="notifications-outline" size={26} color={colors.primary} />
+          {requests.length > 0 && (
+            <View style={s.badge}>
+              <Text style={s.badgeText}>{requests.length}</Text>
+            </View>
+          )}
         </Pressable>
       </View>
 
@@ -101,13 +160,84 @@ export default function FriendsScreen({ onSignIn }: { onSignIn: () => void }) {
         />
       </View>
 
+      {/* <View style={[s.search, { marginTop: 4 }]}>
+        <Ionicons name="person-add-outline" size={22} color={colors.primary} />
+        <TextInput
+          style={s.searchInput}
+          placeholder="Add friend by username"
+          placeholderTextColor={colors.muted}
+          value={newName}
+          onChangeText={setNewName}
+          onSubmitEditing={submitNewFriend}
+          returnKeyType="send"
+          autoCapitalize="none"
+          autoCorrect={false}
+        />
+        {newName.trim().length > 0 && (
+          <Pressable hitSlop={8} onPress={submitNewFriend} accessibilityLabel="Send friend request">
+            <Ionicons name="send" size={20} color={colors.primary} />
+          </Pressable>
+        )}
+      </View> */}
+
       <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 16 }}>
+        {showRequests && (
+          <View>
+            <Text style={s.sectionTitle}>Requests</Text>
+            {requests.length === 0 && <Text style={s.empty}>No pending requests.</Text>}
+            {requests.map((r) => (
+              <View key={r.id} style={s.row}>
+                <Avatar name={r.username} size={40} />
+                <Text style={[s.name, { flex: 1 }]} numberOfLines={1}>
+                  @{r.username}
+                </Text>
+                <Pressable style={s.accept} onPress={() => run(() => acceptRequest(r.id))}>
+                  <Text style={s.acceptText}>Accept</Text>
+                </Pressable>
+                <Pressable onPress={() => run(() => declineRequest(r.id))}>
+                  <Text style={s.decline}>Decline</Text>
+                </Pressable>
+              </View>
+            ))}
+            <Text style={[s.sectionTitle, { marginTop: 16 }]}>Friends</Text>
+          </View>
+        )}
+
         {visible.length === 0 && (
           <Text style={s.empty}>{friends.length === 0 ? 'No friends yet.' : 'No friends match your search.'}</Text>
         )}
         {visible.map((f) => (
           <FriendRow key={f.id} friend={f} open={menu?.friend.id === f.id} onMenu={(target) => openMenu(f, target)} />
         ))}
+
+        {!query.trim() && suggestions.length > 0 && (
+          <View>
+            <Text style={[s.sectionTitle, { marginTop: 20 }]}>People you may know</Text>
+            {suggestions.map((u) => (
+              <View key={u.id} style={s.row}>
+                <Avatar name={u.username} size={40} />
+                <View style={{ flex: 1 }}>
+                  <Text style={s.name} numberOfLines={1}>{u.username}</Text>
+                  <Text style={s.handle} numberOfLines={1}>
+                    {u.mutual > 0 ? `${u.mutual} mutual ${u.mutual === 1 ? 'friend' : 'friends'}` : `@${u.username}`}
+                  </Text>
+                </View>
+                <Pressable
+                  style={s.accept}
+                  accessibilityLabel={`Send friend request to ${u.username}`}
+                  onPress={() =>
+                    run(async () => {
+                      await sendRequest(u.username);
+                      showNotice('Friends', `Request sent to ${u.username}.`);
+                    })
+                  }
+                >
+                  <Text style={s.acceptText}>Add</Text>
+                </Pressable>
+              </View>
+            ))}
+          </View>
+        )}
       </ScrollView>
 
       {menu && <PopoverMenu anchor={menu.anchor} items={menuItems(menu.friend)} onClose={() => setMenu(null)} />}
@@ -142,8 +272,28 @@ function FriendRow({ friend, open, onMenu }: { friend: Friend; open: boolean; on
   );
 }
 
+const km = (m: number) => `${(m / 1000).toFixed(2)} km`;
+
 function FriendProfile({ friend, onBack }: { friend: Friend; onBack: () => void }) {
   const insets = useSafeAreaInsets();
+  const [activity, setActivity] = useState<'run' | 'bike'>('run');
+  const [routes, setRoutes] = useState<SharedRoute[] | null>(null); // null = loading
+
+  useEffect(() => {
+    let alive = true;
+    setRoutes(null);
+    getFriendRoutes(friend.id, activity)
+      .then((r) => alive && setRoutes(r))
+      .catch((e) => {
+        if (!alive) return;
+        setRoutes([]);
+        showNotice('Friends', cleanError(e, "Couldn't load their routes."));
+      });
+    return () => {
+      alive = false;
+    };
+  }, [friend.id, activity]);
+
   return (
     <View style={[s.root, { paddingTop: insets.top + 8 }]}>
       <Pressable style={s.back} onPress={onBack} hitSlop={8} accessibilityLabel="Back to friends">
@@ -152,7 +302,48 @@ function FriendProfile({ friend, onBack }: { friend: Friend; onBack: () => void 
       </Pressable>
       <ProfileHeader name={friend.name} username={friend.username} />
       {friend.muted && <Text style={s.note}>You&apos;ve muted challenges from {friend.name}.</Text>}
-      <Text style={s.empty}>No shared activities yet.</Text>
+
+      <View style={s.toggle}>
+        {(['run', 'bike'] as const).map((a) => (
+          <Pressable key={a} style={[s.toggleBtn, activity === a && s.toggleOn]} onPress={() => setActivity(a)}>
+            <Ionicons
+              name={a === 'run' ? 'walk-outline' : 'bicycle-outline'}
+              size={18}
+              color={activity === a ? colors.onPrimary : colors.primary}
+            />
+            <Text style={[s.toggleText, activity === a && { color: colors.onPrimary }]}>
+              {a === 'run' ? 'Running' : 'Biking'}
+            </Text>
+          </Pressable>
+        ))}
+      </View>
+
+      <ScrollView contentContainerStyle={{ paddingBottom: 16 }}>
+        {routes === null && <Text style={s.empty}>Loading…</Text>}
+        {routes?.length === 0 && (
+          <Text style={s.empty}>{friend.name} hasn&apos;t saved any {activity === 'run' ? 'running' : 'biking'} challenges yet.</Text>
+        )}
+        {routes?.map((r) => (
+          <View key={r.id} style={s.row}>
+            <Ionicons name={r.activity === 'run' ? 'walk-outline' : 'bicycle-outline'} size={26} color={colors.primary} />
+            <View style={{ flex: 1 }}>
+              <Text style={s.name} numberOfLines={1}>{r.name}</Text>
+              <Text style={s.handle}>
+                {km(r.distance_m)}
+                {r.elevation_gain_m ? ` · ${Math.round(r.elevation_gain_m)} m climb` : ''}
+              </Text>
+            </View>
+            <View style={s.tag}>
+              <Ionicons
+                name={r.visibility === 'public' ? 'globe-outline' : 'lock-closed-outline'}
+                size={12}
+                color={colors.muted}
+              />
+              <Text style={s.tagText}>{r.visibility === 'public' ? 'Public' : 'Friends'}</Text>
+            </View>
+          </View>
+        ))}
+      </ScrollView>
     </View>
   );
 }
@@ -207,4 +398,42 @@ const s = StyleSheet.create({
     justifyContent: 'center',
   },
   loginText: { color: colors.onPrimary, fontSize: 15, fontWeight: '600' },
+
+  // requests
+  badge: {
+    position: 'absolute',
+    top: -4,
+    right: -6,
+    minWidth: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: '#E53935',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 3,
+  },
+  badgeText: { color: '#fff', fontSize: 10, fontWeight: '700' },
+  sectionTitle: { fontSize: 14, fontWeight: '700', color: colors.primary, paddingHorizontal: 28, marginTop: 12 },
+  accept: { backgroundColor: colors.primary, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 6 },
+  acceptText: { color: colors.onPrimary, fontWeight: '600', fontSize: 13 },
+  decline: { color: colors.muted, fontSize: 13, paddingHorizontal: 8 },
+
+  // friend profile routes
+  toggle: { flexDirection: 'row', gap: 10, paddingHorizontal: 16, marginTop: 20, marginBottom: 8 },
+  toggleBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    height: 40,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: colors.lavender,
+    backgroundColor: colors.fieldBg,
+  },
+  toggleOn: { backgroundColor: colors.primary, borderColor: colors.primary },
+  toggleText: { fontSize: 14, fontWeight: '600', color: colors.primary },
+  tag: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  tagText: { fontSize: 11, color: colors.muted },
 });
