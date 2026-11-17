@@ -110,15 +110,9 @@ export class GpsTracker {
     }
   }
 
-  /**
-   * Resolves true when device location services are on. If they are off, shows the
-   * Android system "turn on location" dialog the first time only.
-   * Later calls just re-check without prompting. Never prompts on iOS/web.
-   * Pass `force` for a user-initiated request, such as the locate button, to prompt
-   * even if the dialog was already shown.
-   */
-  async ensureServicesEnabled(force = false): Promise<boolean> {
-
+  async getCurrent(): Promise<GpsFix | null> {
+    const granted = await this.requestPermission();
+    if (!granted) return null;
     try {
       if (!(await this.ensureServicesEnabled())) return null;
       const loc = await Location.getCurrentPositionAsync({
@@ -131,20 +125,23 @@ export class GpsTracker {
   }
 
   /**
-   * Returns true if location services are on. On Android, prompts the user to
-   * turn them on (once per launch unless `force` is true).
+   * Resolves true when device location services are on. If they are off, shows the
+   * Android system "turn on location" dialog the first time only.
+   * Later calls just re-check without prompting. Never prompts on iOS/web.
+   * Pass `force` for a user-initiated request, such as the locate button, to prompt
+   * even if the dialog was already shown.
    */
-    async ensureServicesEnabled(force = false): Promise<boolean> {
-      try {
-        if (await Location.hasServicesEnabledAsync()) return true;
-        if (Platform.OS !== "android" || (servicesPromptShown && !force)) return false;
-        servicesPromptShown = true;
-        await Location.enableNetworkProviderAsync();
-        return await Location.hasServicesEnabledAsync();
-      } catch {
-        return false;
-      }
+  async ensureServicesEnabled(force = false): Promise<boolean> {
+    try {
+      if (await Location.hasServicesEnabledAsync()) return true;
+      if (Platform.OS !== "android" || (servicesPromptShown && !force)) return false;
+      servicesPromptShown = true;
+      await Location.enableNetworkProviderAsync();
+      return await Location.hasServicesEnabledAsync();
+    } catch {
+      return false;
     }
+  }
 
   /**
    * Returns the OS's cached last-known position without spinning up GPS.

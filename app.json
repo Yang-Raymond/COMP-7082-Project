@@ -20,6 +20,7 @@
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
+      "blockedPermissions": ["android.permission.CAMERA"],
       "package": "com.darealiferatsteam.GhostRacer"
     },
     "web": {
@@ -42,6 +43,14 @@
       "expo-status-bar",
       "expo-web-browser",
       "@rnmapbox/maps",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow GhostRacer to use your photos so you can choose a profile picture.",
+          "cameraPermission": "Allow GhostRacer to use the camera for your profile photo.",
+          "microphonePermission": false
+        }
+      ],
       [
         "expo-location",
         {

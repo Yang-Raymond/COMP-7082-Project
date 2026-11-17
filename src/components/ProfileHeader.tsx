@@ -7,16 +7,17 @@ interface Props {
   name: string;
   username: string;
   stats?: { value: number; label: string }[];
+  /** Shown in the avatar instead of the first letter. */
+  photo?: string | null;
   /** Shows the "+" badge on the avatar. */
   onAddPhoto?: () => void;
-  photo?: string | null;
 }
 
 /** Big avatar with name, @handle and counts beside it. Used on the You tab and a friend's profile. */
-export default function ProfileHeader({ name, username, stats, onAddPhoto }: Props) {
+export default function ProfileHeader({ name, username, stats, photo, onAddPhoto }: Props) {
   return (
     <View style={s.row}>
-      <Avatar name={name} size={104} onAdd={onAddPhoto} />
+      <Avatar name={name} size={104} photo={photo} onAdd={onAddPhoto} />
       <View style={s.info}>
         <Text style={s.name} numberOfLines={1}>{name}</Text>
         <Text style={s.handle} numberOfLines={1}>@{username}</Text>

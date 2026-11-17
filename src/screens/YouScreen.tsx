@@ -2,17 +2,22 @@ import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, Pressable, ScrollView, Share, StyleSheet } from 'react-native';
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as ImagePicker from 'expo-image-picker';
 import { AuthScreen, signOut, useAuthContext } from '../auth';
-import PopoverMenu, { Anchor, ViewRef, measureAnchor } from '../components/PopoverMenu';
+import PopoverMenu, { Anchor, MenuItem, ViewRef, measureAnchor } from '../components/PopoverMenu';
 import ProfileHeader from '../components/ProfileHeader';
 import RouteSketch from '../components/RouteSketch';
 import { getRoutes } from '../services/storage';
 import { onUploadsChanged } from '../services/routeSync';
 import { getFriends } from '../services/friends';
 import { getPinnedIds, savePinnedIds } from '../services/pins';
-import { showNotice } from '../services/dialog';
+import {
+  getProfilePhoto,
+  peekProfilePhoto,
+  pickProfilePhoto,
+  recoverPickedPhoto,
+  removeProfilePhoto,
+} from '../services/profilePhoto';
+import { confirmAction, showNotice } from '../services/dialog';
 import { formatDateTime, formatKm, formatMinSec } from '../services/format';
 import { colors } from '../constants/ghostTheme';
 import { SavedRoute } from '../types/route';
@@ -30,31 +35,44 @@ export default function YouScreen() {
   const [section, setSection] = useState<Section>('pinned');
   const [picking, setPicking] = useState(false);
   const [settings, setSettings] = useState<Anchor | null>(null);
-  const [photo, setPhoto] = useState<string | null>(null);
+  // Remembers whose photo it is, so a different account signing in never sees the last one's
+  const [photo, setPhoto] = useState<{ userId: number; uri: string | null } | null>(() =>
+    user ? { userId: user.id, uri: peekProfilePhoto(user.id) } : null
+  );
+  const choosingPhoto = useRef(false);
+  const userId = user?.id;
 
   useEffect(() => {
     const loadRoutes = () => getRoutes().then((r) => setRoutes([...r].sort((a, b) => b.createdAt - a.createdAt)));
     loadRoutes();
     getFriends().then((f) => setFriendCount(f.length));
     getPinnedIds().then(setPinned);
+    // Uploads finish in the background, so re-read the routes to show "Uploaded" without leaving the tab
     return onUploadsChanged(loadRoutes);
   }, []);
 
   useEffect(() => {
-    const loadPhoto = async () => {
-      if (user?.username) {
-        const savedPhoto = await AsyncStorage.getItem(`profile_photo_${user.username}`);
-        if (savedPhoto) setPhoto(savedPhoto);
-      }
+    if (userId == null) return;
+    let live = true;
+    const show = (uri: string | null) => {
+      if (live) setPhoto({ userId, uri });
     };
-    loadPhoto();
-  }, [user?.username]);
+    getProfilePhoto(userId)
+      .then(show)
+      // Android may have closed the app while the photo library was open
+      .then(() => recoverPickedPhoto(userId))
+      .then((uri) => uri && show(uri))
+      .catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, [userId]);
 
   if (!isSignedIn || !user) return <AuthScreen />;
 
   const name = user.username.charAt(0).toUpperCase() + user.username.slice(1);
-  const handle = user.username.toLowerCase().replace(/\s+/g, '');
-  
+  const photoUri = photo?.userId === user.id ? photo.uri : null;
+  // A pinned route that was deleted from Home just drops out here
   const pinnedRoutes = pinned.flatMap((id) => routes.filter((r) => r.id === id));
   const unpinned = routes.filter((r) => !pinned.includes(r.id));
 
@@ -63,35 +81,46 @@ export default function YouScreen() {
     savePinnedIds(ids);
   };
 
-  const uploadLabel = (r: SavedRoute) => {
-    return r.upload ? '' : ' • Not uploaded';
-  };
-
-  const pickPhoto = async () => {
-    const res = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
-      allowsEditing: true,
-      aspect: [1, 1],
-      quality: 0.7,
-    });
-    
-    if (!res.canceled) {
-      const newUri = res.assets[0].uri;
-      setPhoto(newUri);
-      if (user?.username) {
-        await AsyncStorage.setItem(`profile_photo_${user.username}`, newUri);
-      }
-    }
-  };
-
   const shareProfile = async () => {
     const message = `Race my ghost on GhostRacer! Find me at @${user.username}.`;
     try {
       await Share.share({ message });
     } catch (e) {
+      // Web throws when the browser can't share; cancelling the share sheet isn't an error
       if (!(e instanceof Error && e.name === 'AbortError')) showNotice('Share profile', message);
     }
   };
+
+  const choosePhoto = async () => {
+    if (choosingPhoto.current) return; // a second tap while the library is opening
+    choosingPhoto.current = true;
+    const id = user.id;
+    try {
+      const uri = await pickProfilePhoto(id);
+      if (uri) setPhoto({ userId: id, uri });
+    } catch (e) {
+      showNotice('Profile photo', e instanceof Error ? e.message : "Couldn't save your photo. Try again.");
+    }
+    // Not in a finally block: React Compiler skips any component that uses one
+    choosingPhoto.current = false;
+  };
+
+  const settingsItems: MenuItem[] = [
+    ...(photoUri
+      ? [
+          {
+            label: 'Remove photo',
+            icon: 'trash-outline',
+            onPress: () =>
+              confirmAction('Remove your profile photo?', 'Your initial will show instead.', 'Remove', async () => {
+                await removeProfilePhoto(user.id).catch(() => {});
+                setPhoto(null);
+              }),
+          } satisfies MenuItem,
+        ]
+      : []),
+    { label: 'Sign out', icon: 'log-out-outline', separated: !!photoUri, onPress: () => signOut() },
+  ];
 
   const picker = (
     <View style={s.picker}>
@@ -163,25 +192,31 @@ export default function YouScreen() {
   return (
     <View ref={root} style={[s.root, { paddingTop: insets.top + 8 }]}>
       <View style={s.topRow}>
-        <Pressable ref={gear} onPress={() => measureAnchor(gear.current, root.current, setSettings)} hitSlop={8}>
-          <Ionicons name="settings-sharp" size={24} color={colors.primary} />
+        <Pressable
+          ref={gear}
+          hitSlop={8}
+          accessibilityLabel="Settings"
+          onPress={() => measureAnchor(gear.current, root.current, setSettings)}
+        >
+          <Ionicons name="settings-outline" size={26} color={colors.primary} />
         </Pressable>
       </View>
 
-      <ScrollView contentContainerStyle={{ paddingBottom: 140 }}>
-        <ProfileHeader 
-          photo={photo} 
-          onAddPhoto={pickPhoto}
-          name={name} 
-          username={handle} 
+      {/* The whole page scrolls, so on a small phone the list isn't squeezed under the header */}
+      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 16 }}>
+        <ProfileHeader
+          name={name}
+          username={user.username}
+          photo={photoUri}
+          onAddPhoto={choosePhoto}
           stats={[
-            { value: routes.length, label: 'activities' },
-            { value: friendCount, label: 'friends' }
+            { value: routes.length, label: routes.length === 1 ? 'activity' : 'activities' },
+            { value: friendCount, label: friendCount === 1 ? 'friend' : 'friends' },
           ]}
         />
 
         <View style={s.buttons}>
-          <Pressable style={s.btn}>
+          <Pressable style={s.btn} onPress={() => showNotice('Edit profile', 'Editing your profile is coming soon.')}>
             <Text style={s.btnText}>Edit profile</Text>
           </Pressable>
           <Pressable style={s.btn} onPress={shareProfile}>
@@ -189,60 +224,92 @@ export default function YouScreen() {
           </Pressable>
         </View>
 
-        <View style={s.tabs}>
-          <Pressable style={s.tab} onPress={() => setSection('pinned')}>
+        <View style={s.tabs} accessibilityRole="tablist">
+          <SectionTab label="Pinned activities" active={section === 'pinned'} onPress={() => setSection('pinned')}>
             <Ionicons name="apps" size={24} color={section === 'pinned' ? colors.primary : colors.muted} />
-            <View style={[s.underline, section === 'pinned' && s.underlineOn]} />
-          </Pressable>
-          <Pressable style={s.tab} onPress={() => setSection('activities')}>
-            <Ionicons name="trail-sign-outline" size={24} color={section === 'activities' ? colors.primary : colors.muted} />
-            <View style={[s.underline, section === 'activities' && s.underlineOn]} />
-          </Pressable>
+          </SectionTab>
+          <SectionTab label="All activities" active={section === 'activities'} onPress={() => setSection('activities')}>
+            <MaterialIcons name="route" size={26} color={section === 'activities' ? colors.primary : colors.muted} />
+          </SectionTab>
         </View>
 
         {section === 'pinned' ? pinnedUI : activitiesUI}
       </ScrollView>
 
       {settings && (
-        <PopoverMenu 
-          anchor={settings} 
+        <PopoverMenu
+          anchor={settings}
+          items={settingsItems}
           onClose={() => setSettings(null)}
-          items={[
-            { label: 'Sign out', icon: 'log-out-outline', onPress: () => signOut() }
-          ]}
         />
       )}
     </View>
   );
 }
 
-function PinnedCard({ route, onUnpin }: { route: SavedRoute; onUnpin: () => void }) {
+function SectionTab({ label, active, onPress, children }: { label: string; active: boolean; onPress: () => void; children: React.ReactNode }) {
   return (
-    <View style={s.pinCard}>
-      <Pressable style={s.unpin} onPress={onUnpin} hitSlop={10}>
-        <Ionicons name="close" size={20} color={colors.muted} />
+    <Pressable
+      style={s.tab}
+      onPress={onPress}
+      accessibilityRole="tab"
+      accessibilityLabel={label}
+      accessibilityState={{ selected: active }}
+    >
+      {children}
+      <View style={[s.underline, active && s.underlineOn]} />
+    </Pressable>
+  );
+}
+
+function PinnedCard({ route, onUnpin }: { route: SavedRoute; onUnpin: () => void }) {
+  const [width, setWidth] = useState(0);
+  const sketchW = width - 32;
+  return (
+    <View style={s.pinCard} onLayout={(e) => setWidth(e.nativeEvent.layout.width)}>
+      <View style={[s.pinSketch, { height: Math.max(sketchW * 0.7, 120) }]}>
+        {sketchW > 0 && <RouteSketch points={route.points} width={sketchW} height={sketchW * 0.7} />}
+      </View>
+      <Pressable style={s.unpin} onPress={onUnpin} hitSlop={8} accessibilityLabel={`Unpin ${route.name}`}>
+        <Ionicons name="close" size={18} color={colors.primary} />
       </Pressable>
       <Text style={s.actName} numberOfLines={1}>{route.name}</Text>
       <Text style={s.date}>{formatDateTime(route.createdAt)}</Text>
-      <View style={s.pinSketch}>
-        <RouteSketch points={route.points} width={200} height={100} />
-      </View>
       <Stats route={route} />
     </View>
   );
 }
 
+/** " · Uploaded" and so on for "Save & Challenge" routes; nothing for routes kept on the phone. */
+function uploadLabel(route: SavedRoute): string {
+  switch (route.upload?.state) {
+    case 'done':
+      return ' · Uploaded';
+    case 'pending':
+      return ' · Waiting to upload';
+    case 'failed':
+      return ` · Upload failed: ${route.upload.error}`;
+    default:
+      return '';
+  }
+}
+
 function Stats({ route }: { route: SavedRoute }) {
   return (
     <View style={s.stats}>
-      <View style={s.stat}>
-        <Text style={s.statLabel}>Distance</Text>
-        <Text style={s.statValue}>{formatKm((route as any).distanceMeters || 0)} <Text style={s.statUnit}>km</Text></Text>
-      </View>
-      <View style={s.stat}>
-        <Text style={s.statLabel}>Time</Text>
-        <Text style={s.statValue}>{formatMinSec(route.durationMs)}</Text>
-      </View>
+      <Stat label="Time" value={formatMinSec(route.durationMs)} unit="min" />
+      <Stat label="Distance" value={formatKm(route.distanceMeters)} unit="km" />
+    </View>
+  );
+}
+
+function Stat({ label, value, unit }: { label: string; value: string; unit: string }) {
+  return (
+    <View style={s.stat}>
+      <Text style={s.statLabel}>{label}</Text>
+      <Text style={s.statValue}>
+        {value} <Text style={s.statUnit}>{unit}</Text>
+      </Text>
     </View>
   );
 }
@@ -258,6 +325,7 @@ const s = StyleSheet.create({
   underline: { width: 32, height: 2, borderRadius: 1 },
   underlineOn: { backgroundColor: colors.primary },
   empty: { color: colors.muted, fontSize: 14, paddingVertical: 16 },
+  // Pinned
   pinWrap: { paddingHorizontal: 30, paddingTop: 22, gap: 16 },
   pinEmpty: {
     aspectRatio: 1,
@@ -290,6 +358,7 @@ const s = StyleSheet.create({
   link: { fontSize: 14, color: colors.primary },
   pickRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 10, borderTopWidth: 1, borderTopColor: colors.border },
   pickName: { fontSize: 15, fontWeight: '600', color: colors.primary },
+  // Activities
   activity: { paddingHorizontal: 14, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: colors.border },
   actName: { fontSize: 22, fontWeight: '800', color: colors.primary },
   date: { fontSize: 11, color: colors.muted },

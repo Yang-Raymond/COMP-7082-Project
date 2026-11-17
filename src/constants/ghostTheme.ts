@@ -18,6 +18,7 @@ export const colors = {
   blue: '#007FFF',
   ahead: '#0f9d75',
   behind: '#c62828',
+  warning: '#b26a00',
 };
 
 export const shadow = {
