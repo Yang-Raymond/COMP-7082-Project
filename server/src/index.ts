@@ -1,14 +1,16 @@
 import bcrypt from "bcryptjs";
 import cors from "cors";
 import "dotenv/config"; // must stay first so db.ts can read process.env
-import crypto from "node:crypto";
 import type { NextFunction, Request, Response } from "express";
 import express from "express";
 import jwt from "jsonwebtoken";
+import crypto from "node:crypto";
 import nodemailer from "nodemailer";
+import { accountRouter } from "./accountRoutes";
 import { pool } from "./db";
 import { friendsRouter } from "./friends";
 import { routesRouter } from "./routes";
+
 
 const JWT_SECRET = process.env.JWT_SECRET;
 if (!JWT_SECRET) {
@@ -121,6 +123,7 @@ app.get("/auth/me", async (req: Request, res: Response) => {
 
 app.use("/routes", routesRouter);
 app.use("/friends", friendsRouter);
+app.use("/account", accountRouter);
 
 // ---------- password reset ----------
 

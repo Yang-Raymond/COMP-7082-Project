@@ -47,6 +47,7 @@ export default function RecordScreen({ rec, draft, onDraft, onSaved }: Props) {
     // A second tap while the first save is still writing would save (and upload) the run twice
     if (!draft || saving.current) return;
     saving.current = true;
+    console.log('[save]', { upload, ownerId: user?.id, visibility });
     try {
       await saveDraft(draft, name, { upload, ownerId: user?.id, visibility });
     } finally {

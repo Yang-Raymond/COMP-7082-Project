@@ -1,15 +1,19 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, Pressable, ScrollView, Share, StyleSheet } from 'react-native';
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
+import React, { useEffect, useRef, useState } from 'react';
+import { Pressable, ScrollView, Share, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AuthScreen, signOut, useAuthContext } from '../auth';
+import EditProfileModal from '../components/EditProfileModal';
 import PopoverMenu, { Anchor, MenuItem, ViewRef, measureAnchor } from '../components/PopoverMenu';
 import ProfileHeader from '../components/ProfileHeader';
 import RouteSketch from '../components/RouteSketch';
-import { getRoutes } from '../services/storage';
-import { onUploadsChanged } from '../services/routeSync';
+import { colors } from '../constants/ghostTheme';
+import { changeUsername } from '../services/account';
+import { confirmAction, showNotice } from '../services/dialog';
+import { formatDateTime, formatKm, formatMinSec } from '../services/format';
 import { getFriends } from '../services/friends';
 import { getPinnedIds, savePinnedIds } from '../services/pins';
+import { getProfileDetails, ProfileDetails, saveProfileDetails } from '../services/profileDetails';
 import {
   getProfilePhoto,
   peekProfilePhoto,
@@ -17,9 +21,8 @@ import {
   recoverPickedPhoto,
   removeProfilePhoto,
 } from '../services/profilePhoto';
-import { confirmAction, showNotice } from '../services/dialog';
-import { formatDateTime, formatKm, formatMinSec } from '../services/format';
-import { colors } from '../constants/ghostTheme';
+import { onUploadsChanged } from '../services/routeSync';
+import { getRoutes } from '../services/storage';
 import { SavedRoute } from '../types/route';
 
 type Section = 'pinned' | 'activities';
@@ -35,6 +38,9 @@ export default function YouScreen() {
   const [section, setSection] = useState<Section>('pinned');
   const [picking, setPicking] = useState(false);
   const [settings, setSettings] = useState<Anchor | null>(null);
+  const [editing, setEditing] = useState(false);
+  // Remembers whose details these are, so a different account signing in never sees the last one's
+  const [details, setDetails] = useState<({ userId: number } & ProfileDetails) | null>(null);
   // Remembers whose photo it is, so a different account signing in never sees the last one's
   const [photo, setPhoto] = useState<{ userId: number; uri: string | null } | null>(() =>
     user ? { userId: user.id, uri: peekProfilePhoto(user.id) } : null
@@ -54,6 +60,9 @@ export default function YouScreen() {
   useEffect(() => {
     if (userId == null) return;
     let live = true;
+    getProfileDetails(userId).then((d) => {
+      if (live) setDetails({ userId, ...d });
+    });
     const show = (uri: string | null) => {
       if (live) setPhoto({ userId, uri });
     };
@@ -70,7 +79,10 @@ export default function YouScreen() {
 
   if (!isSignedIn || !user) return <AuthScreen />;
 
-  const name = user.username.charAt(0).toUpperCase() + user.username.slice(1);
+  const mine = details?.userId === user.id ? details : null;
+  const customName = mine?.displayName ?? '';
+  const bio = mine?.bio ?? '';
+  const name = customName || user.username.charAt(0).toUpperCase() + user.username.slice(1);
   const photoUri = photo?.userId === user.id ? photo.uri : null;
   // A pinned route that was deleted from Home just drops out here
   const pinnedRoutes = pinned.flatMap((id) => routes.filter((r) => r.id === id));
@@ -89,6 +101,13 @@ export default function YouScreen() {
       // Web throws when the browser can't share; cancelling the share sheet isn't an error
       if (!(e instanceof Error && e.name === 'AbortError')) showNotice('Share profile', message);
     }
+  };
+
+  const saveProfile = async (d: ProfileDetails, newUsername: string) => {
+    // Username first, so a "taken" error stops everything and nothing is half-saved
+    if (newUsername !== user.username) await changeUsername(newUsername);
+    await saveProfileDetails(user.id, d);
+    setDetails({ userId: user.id, ...d });
   };
 
   const choosePhoto = async () => {
@@ -208,6 +227,7 @@ export default function YouScreen() {
           name={name}
           username={user.username}
           photo={photoUri}
+          bio={bio}
           onAddPhoto={choosePhoto}
           stats={[
             { value: routes.length, label: routes.length === 1 ? 'activity' : 'activities' },
@@ -216,7 +236,7 @@ export default function YouScreen() {
         />
 
         <View style={s.buttons}>
-          <Pressable style={s.btn} onPress={() => showNotice('Edit profile', 'Editing your profile is coming soon.')}>
+          <Pressable style={s.btn} onPress={() => setEditing(true)}>
             <Text style={s.btnText}>Edit profile</Text>
           </Pressable>
           <Pressable style={s.btn} onPress={shareProfile}>
@@ -243,6 +263,14 @@ export default function YouScreen() {
           onClose={() => setSettings(null)}
         />
       )}
+
+      <EditProfileModal
+        visible={editing}
+        initial={{ displayName: customName, bio }}
+        username={user.username}
+        onClose={() => setEditing(false)}
+        onSave={saveProfile}
+      />
     </View>
   );
 }

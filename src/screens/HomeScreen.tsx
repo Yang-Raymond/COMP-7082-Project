@@ -12,6 +12,9 @@ import RouteSketch from '../components/RouteSketch';
 import { useAuthContext } from '../auth';
 import { useCurrentPosition } from '../hooks/useCurrentPosition';
 import { getRoutes, deleteRoute } from '../services/storage';
+import { archiveRoute } from '../services/serverRoutes';
+import { showNotice } from '../services/dialog';
+import { cleanError } from '../services/friends';
 import { formatKm, formatMinSec } from '../services/format';
 import { formatDistance, haversineDistance } from '../services/distance';
 import { colors, shadow } from '../constants/ghostTheme';
@@ -39,7 +42,7 @@ function Chip({ label, icon, on, onPress }: { label: string; icon: IconName; on:
 export default function HomeScreen({ onRace }: { onRace: (r: SavedRoute) => void }) {
   const insets = useSafeAreaInsets();
   const mapRef = useRef<GhostMapHandle>(null);
-  const { canChallenge } = useAuthContext();
+  const { canChallenge, user } = useAuthContext();
   const [routes, setRoutes] = useState<SavedRoute[]>([]);
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<ActivityType | null>(null);
@@ -50,14 +53,19 @@ export default function HomeScreen({ onRace }: { onRace: (r: SavedRoute) => void
     getRoutes().then(setRoutes);
   }, []);
 
+  // Local storage is shared by everyone who signs in on this phone, so only show (and allow deleting) the
+  // signed-in user's own routes. Routes saved before owners were recorded have no ownerId and stay visible.
+  const isMine = (r: SavedRoute) => r.ownerId == null || r.ownerId === user?.id;
+
   const visible = useMemo(
     () =>
       routes.filter(
         (r) =>
+          (r.ownerId == null || r.ownerId === user?.id) &&
           r.name.toLowerCase().includes(query.toLowerCase()) &&
           (!filter || (r.activity ?? 'run') === filter)
       ),
-    [routes, query, filter]
+    [routes, query, filter, user?.id]
   );
 
   // Route currently highlighted on the map
@@ -93,9 +101,20 @@ export default function HomeScreen({ onRace }: { onRace: (r: SavedRoute) => void
     if (r) selectRoute(r);
   };
 
-  const remove = async (id: string) => {
-    await deleteRoute(id);
-    if (id === selectedId) setSelectedId(null);
+  /** Deletes one of your own routes. If it was uploaded, it is archived on the server too, so friends stop seeing it. */
+  const remove = async (r: SavedRoute) => {
+    if (!isMine(r)) return;
+    const up = r.upload;
+    if (up?.state === 'done') {
+      try {
+        await archiveRoute(up.serverId);
+      } catch (e) {
+        showNotice('Delete route', cleanError(e, "Couldn't delete it from the server. Try again."));
+        return;
+      }
+    }
+    await deleteRoute(r.id);
+    if (r.id === selectedId) setSelectedId(null);
     setRoutes(await getRoutes());
   };
 
@@ -154,9 +173,11 @@ export default function HomeScreen({ onRace }: { onRace: (r: SavedRoute) => void
                 {!canChallenge && <Ionicons name="lock-closed" size={11} color={colors.text} />}
                 <Text style={s.tagText}>{(r.activity ?? 'run') === 'bike' ? 'Bike' : 'Run'}</Text>
               </View>
-              <Pressable onPress={() => remove(r.id)} hitSlop={8} accessibilityLabel="Delete route">
-                <Ionicons name="trash-outline" size={18} color={colors.muted} />
-              </Pressable>
+              {isMine(r) && (
+                <Pressable onPress={() => remove(r)} hitSlop={8} accessibilityLabel="Delete route">
+                  <Ionicons name="trash-outline" size={18} color={colors.muted} />
+                </Pressable>
+              )}
             </View>
             <View style={s.cardRow}>
               <View>
