@@ -72,3 +72,19 @@ export function distanceToRoute(points: LatLng[], p: LatLng): number {
   }
   return best;
 }
+
+/**
+ * Where on segment a->b the point closest to `p` lies, as a fraction in [0, 1] (0 = a, 1 = b).
+ * Uses the same local flat-metre projection as distanceToRoute. A zero-length segment returns 1.
+ */
+export function closestFractionOnSegment(a: LatLng, b: LatLng, p: LatLng): number {
+  const toRad = Math.PI / 180;
+  const mPerDegLat = EARTH_RADIUS_M * toRad;
+  const mPerDegLng = mPerDegLat * Math.cos(p.lat * toRad);
+  const ax = (a.lng - p.lng) * mPerDegLng;
+  const ay = (a.lat - p.lat) * mPerDegLat;
+  const dx = (b.lng - a.lng) * mPerDegLng;
+  const dy = (b.lat - a.lat) * mPerDegLat;
+  const lenSq = dx * dx + dy * dy;
+  return lenSq === 0 ? 1 : Math.max(0, Math.min(1, -(ax * dx + ay * dy) / lenSq));
+}

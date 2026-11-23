@@ -112,17 +112,17 @@ export default function RaceScreen({ route, rec, onExit }: Props) {
     onTerminate: terminate,
   });
 
-  // Finish detection: stops the recorder and shows the result card with the user's finish time.
+  // Finish detection: stops the recorder and shows the result card with both finish times.
   const handleFinish = useCallback(
-    (finishMs: number) => {
+    (userMs: number, ghostMs: number) => {
       rec.finish();
-      setOutcome({ kind: 'finished', userMs: finishMs, ghostMs: route.durationMs });
+      setOutcome({ kind: 'finished', userMs, ghostMs });
     },
-    [rec, route.durationMs]
+    [rec]
   );
   useRaceFinish({
     route,
-    userPoint: last,
+    userPoints: rec.points,
     coveredM: rec.distanceMeters,
     active: rec.status === 'recording',
     onFinish: handleFinish,
