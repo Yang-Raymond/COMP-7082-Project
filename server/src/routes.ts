@@ -333,3 +333,95 @@ routesRouter.delete("/:id", async (req: Request, res: Response) => {
     res.status(500).json({ error: "Server error." });
   }
 });
+
+// POST /routes/:id/runs — save a finished race on a route you can see (yours or someone else's) and answer with
+// your rank. The points are required: the fastest run is the route's ghost, so every run needs its path.
+routesRouter.post("/:id/runs", async (req: Request, res: Response) => {
+  if (!/^\d{1,9}$/.test(String(req.params.id))) return res.status(404).json({ error: "Route not found." });
+  const routeId = Number(req.params.id);
+  const me: number = res.locals.userId;
+  const { durationMs, startedAt, points } = req.body ?? {};
+
+  if (!isNum(durationMs) || durationMs <= 0 || durationMs > MAX_DURATION_MS) {
+    return res.status(400).json({ error: "durationMs is out of range." });
+  }
+  if (!isNum(startedAt) || startedAt < 1_577_836_800_000 || startedAt > Date.now() + 86_400_000) {
+    return res.status(400).json({ error: "startedAt must be a recent time in milliseconds." });
+  }
+  if (!Array.isArray(points) || points.length < 2 || points.length > MAX_POINTS) {
+    return res.status(400).json({ error: `points must have 2 to ${MAX_POINTS} entries.` });
+  }
+  const lats: number[] = [];
+  const lngs: number[] = [];
+  const times: number[] = [];
+  const alts: (number | null)[] = [];
+  for (const p of points) {
+    if (!isNum(p?.lat) || p.lat < -90 || p.lat > 90 || !isNum(p?.lng) || p.lng < -180 || p.lng > 180) {
+      return res.status(400).json({ error: "Every point needs a valid lat and lng." });
+    }
+    if (!isNum(p.t) || p.t < 0 || p.t > MAX_DURATION_MS) return res.status(400).json({ error: "Every point needs t." });
+    const t = Math.round(p.t);
+    if (times.length > 0 && t < times[times.length - 1]) {
+      return res.status(400).json({ error: "Point times must not go backwards." });
+    }
+    lats.push(p.lat);
+    lngs.push(p.lng);
+    times.push(t);
+    alts.push(isNum(p.alt) && p.alt >= -1_000 && p.alt <= 10_000 ? p.alt : null);
+  }
+  if (durationMs + 1_000 < times[times.length - 1]) {
+    return res.status(400).json({ error: "durationMs is shorter than the recorded points." });
+  }
+
+  let client: PoolClient | undefined;
+  let failure: Error | undefined;
+  try {
+    client = await pool.connect();
+    // Only routes you're allowed to see can be raced; anything else answers 404
+    const visible = await client.query(`SELECT 1 FROM routes r WHERE r.id = $1 AND r.status = 'active' AND ${CAN_SEE}`, [
+      routeId,
+      me,
+    ]);
+    if (!visible.rowCount) return res.status(404).json({ error: "Route not found." });
+
+    await client.query("BEGIN");
+    const run = await client.query<{ id: number }>(
+      `INSERT INTO runs (user_id, route_id, duration_ms, started_at)
+       VALUES ($1, $2, $3, to_timestamp($4::float8 / 1000)) RETURNING id`,
+      [me, routeId, Math.round(durationMs), startedAt]
+    );
+    await client.query(
+      `INSERT INTO run_points (run_id, seq, lat, lng, t_ms, alt_m)
+       SELECT $1, p.i, p.lat, p.lng, p.t_ms, p.alt_m
+       FROM unnest($2::float8[], $3::float8[], $4::int[], $5::real[]) WITH ORDINALITY AS p(lat, lng, t_ms, alt_m, i)`,
+      [run.rows[0].id, lats, lngs, times, alts]
+    );
+    await client.query("COMMIT");
+
+    // Your place: how many people have a strictly faster best time, plus one
+    const { rows } = await client.query(
+      `WITH b AS (
+         SELECT user_id, MIN(duration_ms) AS ms FROM runs WHERE route_id = $1 AND NOT flagged GROUP BY user_id
+       )
+       SELECT (SELECT ms FROM b WHERE user_id = $2)::int AS my_best,
+              (SELECT count(*) FROM b WHERE ms < (SELECT ms FROM b WHERE user_id = $2))::int + 1 AS rank,
+              (SELECT count(*) FROM b)::int AS total`,
+      [routeId, me]
+    );
+    const d = Math.round(durationMs);
+    res.status(201).json({
+      rank: rows[0].rank,
+      totalRunners: rows[0].total,
+      durationMs: d,
+      bestMs: rows[0].my_best,
+      isPersonalBest: d <= rows[0].my_best,
+    });
+  } catch (e) {
+    failure = e as Error;
+    await client?.query("ROLLBACK").catch(() => {});
+    console.error("POST /routes/:id/runs failed:", e);
+    res.status(500).json({ error: "Server error." });
+  } finally {
+    client?.release(failure);
+  }
+});

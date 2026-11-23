@@ -1,11 +1,11 @@
 // Route recording state machine (idle/recording/paused) built on GpsTracker.
 // Filters low-quality GPS fixes, produces a RouteDraft and saves it as a SavedRoute.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { totalDistance } from '../services/distance';
+import { elevationGain } from '../services/elevation';
+import { AcceptedFix, checkFix } from '../services/fixFilter';
 import { GpsTracker } from '../services/gpsTracker';
 import { saveLastLocation, saveRoute } from '../services/storage';
-import { totalDistance } from '../services/distance';
-import { AcceptedFix, checkFix } from '../services/fixFilter';
-import { elevationGain } from '../services/elevation';
 import { makeUuid } from '../services/uuid';
 import { ActivityType, RoutePoint, RouteVisibility, SavedRoute } from '../types/route';
 
@@ -161,7 +161,8 @@ export function useRouteRecorder() {
 
 /**
  * Persists a draft as a SavedRoute and remembers its end point as the last known location.
- * With `upload` and the signed-in account's `ownerId`, the route is also marked to be uploaded;
+ * With the signed-in account's `ownerId`, the route always records who it belongs to, so other accounts
+ * on the same phone don't see or delete it. With `upload` too, it is also marked to be uploaded;
  * call uploadPendingRoutes() afterwards. `visibility` ('public' or 'private') says who can see an
  * uploaded route; it defaults to 'private' (the creator and their friends).
  */
@@ -182,10 +183,11 @@ export async function saveDraft(
     durationMs: draft.durationMs,
     elevationGainMeters: draft.elevationGainMeters,
     activity: draft.activity,
+    // Whose route it is, upload or not
+    ...(opts.ownerId != null ? { ownerId: opts.ownerId } : {}),
     ...(upload
       ? {
           clientId: makeUuid(),
-          ownerId: opts.ownerId,
           visibility: opts.visibility ?? ('private' as const),
           upload: { state: 'pending' as const },
         }

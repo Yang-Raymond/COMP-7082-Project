@@ -5,21 +5,22 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { useAuthContext } from '../auth';
 import BottomSheet from '../components/BottomSheet';
 import GhostMap from '../components/GhostMap';
 import LocationButton from '../components/LocationButton';
 import RouteSketch from '../components/RouteSketch';
-import { useAuthContext } from '../auth';
-import { useCurrentPosition } from '../hooks/useCurrentPosition';
-import { getRoutes, deleteRoute } from '../services/storage';
-import { archiveRoute } from '../services/serverRoutes';
-import { showNotice } from '../services/dialog';
-import { cleanError } from '../services/friends';
-import { formatKm, formatMinSec } from '../services/format';
-import { formatDistance, haversineDistance } from '../services/distance';
 import { colors, shadow } from '../constants/ghostTheme';
+import { useCurrentPosition } from '../hooks/useCurrentPosition';
+import { showNotice } from '../services/dialog';
+import { formatDistance, haversineDistance } from '../services/distance';
+import { formatKm, formatMinSec } from '../services/format';
+import { cleanError } from '../services/friends';
+import { archiveRoute } from '../services/serverRoutes';
+import { deleteRoute, getRoutes } from '../services/storage';
 import type { GhostMapHandle } from '../types/map';
 import { ActivityType, SavedRoute } from '../types/route';
+import LeaderboardScreen from './LeaderboardScreen';
 
 
 type IconName = React.ComponentProps<typeof Ionicons>['name'];
@@ -48,6 +49,8 @@ export default function HomeScreen({ onRace }: { onRace: (r: SavedRoute) => void
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<ActivityType | null>(null);
   const [publicOnly, setPublicOnly] = useState(false);
+  // The route whose leaderboard is open, if any
+  const [board, setBoard] = useState<{ id: string; name: string } | null>(null);
   const { position, isLive } = useCurrentPosition();
 
   useEffect(() => {
@@ -55,14 +58,15 @@ export default function HomeScreen({ onRace }: { onRace: (r: SavedRoute) => void
   }, []);
 
   // Local storage is shared by everyone who signs in on this phone, so only show (and allow deleting) the
-  // signed-in user's own routes. Routes saved before owners were recorded have no ownerId and stay visible.
-  const isMine = (r: SavedRoute) => r.ownerId == null || r.ownerId === user?.id;
+  // signed-in user's own routes. Routes with no ownerId (saved before owners were recorded) belong to nobody and are hidden.
+  const isMine = (r: SavedRoute) => r.ownerId === user?.id;
+  console.log('[home]', { me: user?.id, routes: routes.map((r) => ({ name: r.name, ownerId: r.ownerId })) });
 
   const visible = useMemo(
     () =>
       routes.filter(
         (r) =>
-          (r.ownerId == null || r.ownerId === user?.id) &&
+          r.ownerId === user?.id &&
           r.name.toLowerCase().includes(query.toLowerCase()) &&
           (!filter || (r.activity ?? 'run') === filter)
       ),
@@ -100,6 +104,13 @@ export default function HomeScreen({ onRace }: { onRace: (r: SavedRoute) => void
   const onPinPress = (id: string) => {
     const r = visible.find((v) => v.id === id);
     if (r) selectRoute(r);
+  };
+
+  /** Trophy tap: opens the leaderboard of an uploaded route. A route that only lives on this phone has none. */
+  const openBoard = (r: SavedRoute) => {
+    const up = r.upload;
+    if (up?.state === 'done') setBoard({ id: up.serverId, name: r.name });
+    else showNotice('Leaderboard', 'Choose Save & Challenge when you save a route to give it a leaderboard.');
   };
 
   /** Deletes one of your own routes. If it was uploaded, it is archived on the server too, so friends stop seeing it. */
@@ -178,6 +189,13 @@ export default function HomeScreen({ onRace }: { onRace: (r: SavedRoute) => void
                 {!canChallenge && <Ionicons name="lock-closed" size={11} color={colors.text} />}
                 <Text style={s.tagText}>{(r.activity ?? 'run') === 'bike' ? 'Bike' : 'Run'}</Text>
               </View>
+              <Pressable onPress={() => openBoard(r)} hitSlop={8} accessibilityLabel="Leaderboard">
+                <Ionicons
+                  name="trophy-outline"
+                  size={18}
+                  color={r.upload?.state === 'done' ? colors.primary : colors.muted}
+                />
+              </Pressable>
               {isMine(r) && (
                 <Pressable onPress={() => remove(r)} hitSlop={8} accessibilityLabel="Delete route">
                   <Ionicons name="trash-outline" size={18} color={colors.muted} />
@@ -207,6 +225,9 @@ export default function HomeScreen({ onRace }: { onRace: (r: SavedRoute) => void
    * Map using Mapbox.
    */
   const map = <GhostMap ref={mapRef} center={position} showUser={isLive} pins={pins} onPinPress={onPinPress} path={selected?.points} />;
+
+  // Leaderboard open: show it instead of the map (all hooks are above, so this early return is safe)
+  if (board) return <LeaderboardScreen routeId={board.id} routeName={board.name} onBack={() => setBoard(null)} />;
 
   return (
     <View style={s.root}>
