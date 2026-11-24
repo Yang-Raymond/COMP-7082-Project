@@ -76,16 +76,6 @@ async function uploadAll(d: UploadDeps): Promise<UploadSummary> {
     ? (await d.getRoutes()).filter((r) => r.upload?.state === 'pending' && r.clientId && r.ownerId === account.userId)
     : [];
   const summary: UploadSummary = { uploaded: 0, failed: 0, stillPending: pending.length };
-  console.log(
-    '[upload] saved routes',
-    (await d.getRoutes()).map((r) => ({ name: r.name, upload: r.upload?.state, clientId: !!r.clientId, ownerId: r.ownerId }))
-  );
-  console.log('[upload] pass', {
-    signedIn: !!account,
-    userId: account?.userId,
-    apiUrl: base,
-    pending: pending.length,
-  });
   if (!account || !base || pending.length === 0) return summary;
 
   for (const route of pending) {
@@ -112,7 +102,6 @@ async function uploadOne(d: UploadDeps, base: string, token: string, r: SavedRou
       signal: controller.signal,
     });
     const data = await res.json().catch(() => ({}));
-    console.log('[upload]', res.status, `${base}/routes`, data); // debug: remove when done
     // 201 = saved now, 200 = this clientId was already saved (an earlier reply got lost)
     if ((res.status === 200 || res.status === 201) && typeof data?.id === 'string') {
       return { kind: 'done', serverId: data.id };
@@ -124,8 +113,7 @@ async function uploadOne(d: UploadDeps, base: string, token: string, r: SavedRou
       return { kind: 'rejected', error: data.error };
     }
     return { kind: 'retry' };
-  } catch (e) {
-    console.log('[upload] network error', e); // debug: remove when done
+  } catch {
     return { kind: 'retry' };
   } finally {
     clearTimeout(timer);

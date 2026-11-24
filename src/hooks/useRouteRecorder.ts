@@ -173,6 +173,7 @@ export async function saveDraft(
 ): Promise<SavedRoute> {
   // Uploading needs an account, and the server needs at least two points to make a route;
   // otherwise the route just stays on the phone
+  if (draft.points.length < 2) throw new Error('A route needs at least 2 GPS points.');
   const upload = Boolean(opts.upload) && opts.ownerId != null && draft.points.length >= 2;
   const route: SavedRoute = {
     id: `${Date.now()}`,
@@ -196,5 +197,6 @@ export async function saveDraft(
   await saveRoute(route);
   const end = draft.points[draft.points.length - 1];
   if (end) await saveLastLocation({ lat: end.lat, lng: end.lng });
+  
   return route;
 }

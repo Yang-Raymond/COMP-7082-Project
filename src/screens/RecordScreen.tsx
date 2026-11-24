@@ -14,7 +14,7 @@ import { uploadPendingRoutes } from '../services/routeSync';
 import { colors, shadow } from '../constants/ghostTheme';
 import type { GhostMapHandle } from '../types/map';
 import type { RouteVisibility } from '../types/route';
-
+import { showNotice } from '../services/dialog';
 
 /** Recorder state lives in AppShell so a run survives tab switches. */
 interface Props {
@@ -46,6 +46,13 @@ export default function RecordScreen({ rec, draft, onDraft, onSaved }: Props) {
   const save = async (name: string, upload = false, visibility: RouteVisibility = 'private') => {
     // A second tap while the first save is still writing would save (and upload) the run twice
     if (!draft || saving.current) return;
+        if (draft.points.length < 2) {
+      showNotice(
+        'Route not saved',
+        "No GPS track was recorded, so this route can't be saved. Move around outdoors with a clear GPS signal and try again."
+      );
+      return;
+    }
     saving.current = true;
     console.log('[save]', { upload, ownerId: user?.id, visibility });
     try {
