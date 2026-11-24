@@ -123,7 +123,12 @@ function Shell() {
   } else if (activeTab === 'record') {
     content = <RecordScreen rec={rec} draft={draft} onDraft={setDraft} onSaved={() => changeTab('home')} />;
   } else if (activeTab === 'friends') {
-    content = <FriendsScreen onSignIn={goSignIn} />;
+    content = (
+      <FriendsScreen
+        onSignIn={goSignIn}
+        onRace={(r) => requireAuth('Sign in to race this challenge.', () => setRaceRoute(r))}
+      />
+    );
   } else {
     content = <YouScreen />;
   }

@@ -3,8 +3,9 @@
 // 3-2-1-GO countdown once the user is at the route's start point (see useRaceStart). While racing,
 // an off-route check (see useOffRoute) shows a warning banner and ends the race if the user stays
 // too far from the route, replacing the controls with a "Race ended" card. Reaching the route's
-// finish (see useRaceFinish) ends the race too, showing a result card with both times and the winner
-// (not saved).
+// finish (see useRaceFinish) ends the race too, showing a result card with both times and the winner.
+// A finished race on a route that is on the server is sent there, and the card shows the user's rank
+// on that route's leaderboard (see submitRun).
 import { Ionicons } from '@expo/vector-icons';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
@@ -18,13 +19,23 @@ import { useGhostRace } from '../hooks/useGhostRace';
 import { COUNTDOWN_FROM, START_RADIUS_M, useRaceStart } from '../hooks/useRaceStart';
 import { formatDistance } from '../services/distance';
 import { formatClock } from '../services/format';
+import { cleanError } from '../services/friends';
 import { formatDelta } from '../services/ghostCompare';
+import { RunResult, submitRun } from '../services/leaderboard';
 import type { GhostMapHandle } from '../types/map';
 import { useRouteRecorder } from '../hooks/useRouteRecorder';
 import { SavedRoute } from '../types/route';
+import LeaderboardScreen from './LeaderboardScreen';
 
 /** How a race ended: off-route termination, or reaching the finish with both times (ms). */
 type RaceOutcome = { kind: 'offRoute' } | { kind: 'finished'; userMs: number; ghostMs: number };
+
+/** What happened when a finished race was sent to the server. */
+type RankState =
+  | { status: 'saving' }
+  | { status: 'done'; run: RunResult }
+  | { status: 'failed'; message: string }
+  | { status: 'local' }; // the route isn't on the server, so it has no leaderboard
 
 /** Formats a time margin as e.g. "12s" or "1m 5s" (no ahead/behind wording). */
 function formatMargin(ms: number): string {
@@ -50,17 +61,24 @@ interface Props {
  * the route shows a banner, and staying beyond END_M for END_GRACE_MS ends the race (discarding the
  * run) and shows a "Race ended" card. Getting within the finish radius of the route's last point
  * after covering most of the route ends the race and shows a result card (winner, both times,
- * margin); nothing is saved. Exits via onExit.
+ * margin) and, for a route on the server, the user's rank. Exits via onExit.
  */
 export default function RaceScreen({ route, rec, onExit }: Props) {
   const { position, isLive } = useCurrentPosition();
   const mapRef = useRef<GhostMapHandle>(null);
 
   const [outcome, setOutcome] = useState<RaceOutcome | null>(null);
+  const [rank, setRank] = useState<RankState | null>(null);
+  const [showBoard, setShowBoard] = useState(false);
+  const submitted = useRef(false);
   const recording = rec.status !== 'idle';
   const last = rec.points[rec.points.length - 1];
   const center = last ? { lat: last.lat, lng: last.lng } : position;
   const { ghostPosition, delta } = useGhostRace(route, rec.points, rec.elapsedMs);
+
+  // The server's id for this route. Only routes that were uploaded (or loaded from the server) have one.
+  const up = route.upload;
+  const serverId = up?.state === 'done' ? up.serverId : null;
 
   const start = useMemo(() => {
     const p = route.points[0];
@@ -112,13 +130,31 @@ export default function RaceScreen({ route, rec, onExit }: Props) {
     onTerminate: terminate,
   });
 
-  // Finish detection: stops the recorder and shows the result card with the user's finish time.
+  // Finish detection: stops the recorder, shows the result card with the user's finish time, and sends
+  // the run to the server (if the route is there) to get the user's rank on its leaderboard.
   const handleFinish = useCallback(
     (finishMs: number) => {
-      rec.finish();
+      if (submitted.current) return; // the finish can be reported twice before the recorder stops
+      submitted.current = true;
+      const draft = rec.finish();
       setOutcome({ kind: 'finished', userMs: finishMs, ghostMs: route.durationMs });
+
+      if (!serverId || draft.points.length < 2) {
+        setRank({ status: 'local' });
+        return;
+      }
+      setRank({ status: 'saving' });
+      // The server needs the duration to cover the last point's time
+      const durationMs = Math.round(Math.max(finishMs, draft.points[draft.points.length - 1].t));
+      submitRun(serverId, {
+        durationMs,
+        startedAt: Date.now() - durationMs,
+        points: draft.points.map((p) => ({ lat: p.lat, lng: p.lng, t: p.t, ...(p.alt != null ? { alt: p.alt } : {}) })),
+      })
+        .then((run) => setRank({ status: 'done', run }))
+        .catch((e) => setRank({ status: 'failed', message: cleanError(e, "Couldn't save your result.") }));
     },
-    [rec, route.durationMs]
+    [rec, route.durationMs, serverId]
   );
   useRaceFinish({
     route,
@@ -141,6 +177,11 @@ export default function RaceScreen({ route, rec, onExit }: Props) {
     rec.finish();
     onExit();
   };
+
+  // Leaderboard open: show it instead of the race screen (all hooks are above, so this early return is safe)
+  if (showBoard && serverId) {
+    return <LeaderboardScreen routeId={serverId} routeName={route.name} onBack={() => setShowBoard(false)} />;
+  }
 
   return (
     <View style={s.root}>
@@ -204,7 +245,23 @@ export default function RaceScreen({ route, rec, onExit }: Props) {
                   {outcome.userMs < outcome.ghostMs ? 'You won' : 'Ghost won'} by{' '}
                   {formatMargin(outcome.userMs - outcome.ghostMs)}
                 </Text>
+                {rank?.status === 'saving' && <Text style={s.endedSub}>Saving your result…</Text>}
+                {rank?.status === 'done' && (
+                  <Text style={s.endedSub}>
+                    You&apos;re #{rank.run.rank} of {rank.run.totalRunners} on this route
+                    {rank.run.isPersonalBest ? ' · personal best' : ''}
+                  </Text>
+                )}
+                {rank?.status === 'failed' && <Text style={s.endedSub}>{rank.message}</Text>}
+                {rank?.status === 'local' && (
+                  <Text style={s.endedSub}>Only routes shared with Save & Challenge have a leaderboard.</Text>
+                )}
               </>
+            )}
+            {serverId && outcome.kind === 'finished' && rank?.status !== 'saving' && (
+              <Pressable style={[s.endedBtn, s.boardBtn]} onPress={() => setShowBoard(true)}>
+                <Text style={[s.finishText, { color: colors.primary }]}>Leaderboard</Text>
+              </Pressable>
             )}
             <Pressable style={s.endedBtn} onPress={onExit}>
               <Text style={s.finishText}>Back</Text>
@@ -271,6 +328,7 @@ const s = StyleSheet.create({
   endedTitle: { fontSize: 22, fontWeight: '800', color: colors.text },
   endedSub: { fontSize: 16, color: colors.text, marginBottom: 12 },
   endedBtn: { alignSelf: 'stretch', height: 56, borderRadius: 28, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center' },
+  boardBtn: { backgroundColor: colors.lavender },
   countdownWrap: { ...StyleSheet.absoluteFill, alignItems: 'center', justifyContent: 'center' },
   countdownText: { fontSize: 120, fontWeight: '800', color: colors.primary, textShadowColor: colors.bg, textShadowRadius: 12 },
   controls: { flexDirection: 'row', gap: 14, alignItems: 'center', width: '100%' },

@@ -24,9 +24,17 @@ import {
   sendRequest,
   setMuted,
 } from '../services/friends';
+import { fetchRoute } from '../services/serverRoutes';
+import type { SavedRoute } from '../types/route';
 
-/** `onSignIn` opens the sign-in screen and comes back here afterwards. */
-export default function FriendsScreen({ onSignIn }: { onSignIn: () => void }) {
+/** `onSignIn` opens the sign-in screen and comes back here afterwards. `onRace` starts a race on a route. */
+export default function FriendsScreen({
+  onSignIn,
+  onRace,
+}: {
+  onSignIn: () => void;
+  onRace?: (r: SavedRoute) => void;
+}) {
   const insets = useSafeAreaInsets();
   const { isSignedIn } = useAuthContext();
   const root = useRef<ViewRef>(null);
@@ -94,7 +102,7 @@ export default function FriendsScreen({ onSignIn }: { onSignIn: () => void }) {
     );
   }
 
-  if (viewing) return <FriendProfile friend={viewing} onBack={() => setViewing(null)} />;
+  if (viewing) return <FriendProfile friend={viewing} onBack={() => setViewing(null)} onRace={onRace} />;
 
   const openMenu = (friend: Friend, target: ViewRef | null) =>
     measureAnchor(target, root.current, (anchor) => setMenu({ friend, anchor }));
@@ -256,7 +264,15 @@ function FriendRow({ friend, open, onMenu }: { friend: Friend; open: boolean; on
 
 const km = (m: number) => `${(m / 1000).toFixed(2)} km`;
 
-function FriendProfile({ friend, onBack }: { friend: Friend; onBack: () => void }) {
+function FriendProfile({
+  friend,
+  onBack,
+  onRace,
+}: {
+  friend: Friend;
+  onBack: () => void;
+  onRace?: (r: SavedRoute) => void;
+}) {
   const insets = useSafeAreaInsets();
   const [activity, setActivity] = useState<'run' | 'bike'>('run');
   const [routes, setRoutes] = useState<SharedRoute[] | null>(null); // null = loading
@@ -275,6 +291,16 @@ function FriendProfile({ friend, onBack }: { friend: Friend; onBack: () => void 
       alive = false;
     };
   }, [friend.id, activity]);
+
+  // Loads the tapped route from the server and starts a race on it
+  const race = async (r: SharedRoute) => {
+    if (!onRace) return;
+    try {
+      onRace(await fetchRoute(String(r.id)));
+    } catch (e) {
+      showNotice('Friends', cleanError(e, "Couldn't load that route."));
+    }
+  };
 
   return (
     <View style={[s.root, { paddingTop: insets.top + 8 }]}>
@@ -306,7 +332,7 @@ function FriendProfile({ friend, onBack }: { friend: Friend; onBack: () => void 
           <Text style={s.empty}>{friend.name} hasn&apos;t saved any {activity === 'run' ? 'running' : 'biking'} challenges yet.</Text>
         )}
         {routes?.map((r) => (
-          <View key={r.id} style={s.row}>
+          <Pressable key={r.id} style={s.row} onPress={() => race(r)} accessibilityLabel={`Race ${r.name}`}>
             <Ionicons name={r.activity === 'run' ? 'walk-outline' : 'bicycle-outline'} size={26} color={colors.primary} />
             <View style={{ flex: 1 }}>
               <Text style={s.name} numberOfLines={1}>{r.name}</Text>
@@ -323,7 +349,7 @@ function FriendProfile({ friend, onBack }: { friend: Friend; onBack: () => void 
               />
               <Text style={s.tagText}>{r.visibility === 'public' ? 'Public' : 'Friends'}</Text>
             </View>
-          </View>
+          </Pressable>
         ))}
       </ScrollView>
     </View>
