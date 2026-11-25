@@ -50,3 +50,5 @@ example
 .claude/
 AGENTS.md
 CLAUDE.md
+
+!server/ca.pem
