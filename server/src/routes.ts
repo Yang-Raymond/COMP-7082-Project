@@ -425,3 +425,20 @@ routesRouter.post("/:id/runs", async (req: Request, res: Response) => {
     client?.release(failure);
   }
 });
+
+// GET /routes/shared — routes by other people that I'm allowed to see: public ones and my friends' private ones.
+routesRouter.get("/shared", async (req: Request, res: Response) => {
+  try {
+    const { rows } = await pool.query<RouteRow>(
+      `${SELECT_ROUTES}
+       WHERE r.status = 'active' AND r.creator_id <> $2 AND ${CAN_SEE}
+       ORDER BY r.created_at DESC, r.id DESC
+       LIMIT $1`,
+      [50, res.locals.userId]
+    );
+    res.json({ routes: rows.map(toRouteOut) });
+  } catch (e) {
+    console.error("GET /routes/shared failed:", e);
+    res.status(500).json({ error: "Server error." });
+  }
+});
