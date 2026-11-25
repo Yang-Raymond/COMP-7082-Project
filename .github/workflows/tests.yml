@@ -26,3 +26,9 @@ jobs:
 
       - name: Run tests
         run: npm test
+
+      - name: Trigger Render deploy
+        if: github.event_name == 'push' && github.ref == 'refs/heads/Sprint3Dev'
+        env:
+          RENDER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+        run: curl --fail --silent --show-error --get --data-urlencode "ref=${GITHUB_SHA}" "$RENDER_DEPLOY_HOOK_URL"
