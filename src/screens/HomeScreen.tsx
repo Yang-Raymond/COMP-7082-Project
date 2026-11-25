@@ -1,5 +1,6 @@
 // Home screen: map with a search bar and activity filters, plus a bottom sheet listing nearby challenges.
 // Every listed route gets a pin at its start. Tapping a pin or card selects the route (draws it and zooms to fit).
+// The list has your own routes (from this phone) plus routes shared with you by the server (public + friends').
 import { Ionicons } from '@expo/vector-icons';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
@@ -16,12 +17,11 @@ import { showNotice } from '../services/dialog';
 import { formatDistance, haversineDistance } from '../services/distance';
 import { formatKm, formatMinSec } from '../services/format';
 import { cleanError } from '../services/friends';
-import { archiveRoute } from '../services/serverRoutes';
+import { archiveRoute, fetchSharedRoutes } from '../services/serverRoutes';
 import { deleteRoute, getRoutes } from '../services/storage';
 import type { GhostMapHandle } from '../types/map';
 import { ActivityType, SavedRoute } from '../types/route';
 import LeaderboardScreen from './LeaderboardScreen';
-
 
 type IconName = React.ComponentProps<typeof Ionicons>['name'];
 
@@ -36,16 +36,16 @@ function Chip({ label, icon, on, onPress }: { label: string; icon: IconName; on:
 }
 
 /**
- * Loads saved routes, filters them by search text and activity, and renders them
- * as race-able cards over a live map centered on the shared current position.
- * Each visible route has a start pin on the map. Selecting a route
- * draws its path and fits the camera to it.
+ * Loads your saved routes (from this phone) and the routes shared with you (from the server), filters them by
+ * search text, activity and public-only, and renders them as race-able cards over a live map.
+ * Each visible route has a start pin on the map. Selecting a route draws its path and fits the camera to it.
  */
 export default function HomeScreen({ onRace }: { onRace: (r: SavedRoute) => void }) {
   const insets = useSafeAreaInsets();
   const mapRef = useRef<GhostMapHandle>(null);
   const { canChallenge, user } = useAuthContext();
-  const [routes, setRoutes] = useState<SavedRoute[]>([]);
+  const [routes, setRoutes] = useState<SavedRoute[]>([]); // saved on this phone
+  const [shared, setShared] = useState<SavedRoute[]>([]); // other people's routes I may see, from the server
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<ActivityType | null>(null);
   const [publicOnly, setPublicOnly] = useState(false);
@@ -57,21 +57,49 @@ export default function HomeScreen({ onRace }: { onRace: (r: SavedRoute) => void
     getRoutes().then(setRoutes);
   }, []);
 
-  // Local storage is shared by everyone who signs in on this phone, so only show (and allow deleting) the
-  // signed-in user's own routes. Routes with no ownerId (saved before owners were recorded) belong to nobody and are hidden.
-  const isMine = (r: SavedRoute) => r.ownerId === user?.id;
-  console.log('[home]', { me: user?.id, routes: routes.map((r) => ({ name: r.name, ownerId: r.ownerId })) });
+  // Reload the shared list whenever the signed-in user changes. A failure (offline, server asleep) just means
+  // no shared routes for now; your own routes still show.
+  useEffect(() => {
+    if (!user?.id) {
+      setShared([]);
+      return;
+    }
+    let cancelled = false;
+    fetchSharedRoutes()
+      .then((list) => {
+        if (!cancelled) setShared(list);
+      })
+      .catch((e) => {
+        console.warn('[home] could not load shared routes', e);
+        if (!cancelled) setShared([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id]);
 
-  const visible = useMemo(
-    () =>
-      routes.filter(
-        (r) =>
-          r.ownerId === user?.id &&
-          r.name.toLowerCase().includes(query.toLowerCase()) &&
-          (!filter || (r.activity ?? 'run') === filter)
-      ),
-    [routes, query, filter, user?.id]
-  );
+  // Local storage is shared by everyone who signs in on this phone, so only show (and allow deleting) the
+  // signed-in user's own routes from it. Routes with no ownerId belong to nobody and are hidden.
+  const isMine = (r: SavedRoute) => r.ownerId === user?.id;
+
+  useEffect(() => {
+    console.log('[home]', {
+      me: user?.id,
+      mine: routes.filter((r) => r.ownerId === user?.id).length,
+      shared: shared.length,
+    });
+  }, [user?.id, routes, shared]);
+
+  const visible = useMemo(() => {
+    const mine = routes.filter((r) => r.ownerId === user?.id);
+    // /routes/shared never includes your own routes, so there are no duplicates.
+    return [...mine, ...shared].filter(
+      (r) =>
+        r.name.toLowerCase().includes(query.toLowerCase()) &&
+        (!filter || (r.activity ?? 'run') === filter) &&
+        (!publicOnly || r.visibility === 'public')
+    );
+  }, [routes, shared, query, filter, publicOnly, user?.id]);
 
   // Route currently highlighted on the map
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -91,8 +119,8 @@ export default function HomeScreen({ onRace }: { onRace: (r: SavedRoute) => void
 
   /** Card tap: first tap selects the route, a second tap on the selected route starts the race.
    * CHANGE LATER WHEN REDESIGNING THE HOME SCREEN.
-   * New logic to be implemented later: tapping a card expands it and shows more details, 
-   * fits route on map, and a "Race" button is shown to start the race. 
+   * New logic to be implemented later: tapping a card expands it and shows more details,
+   * fits route on map, and a "Race" button is shown to start the race.
    * Tapping the card again collapses it.
    */
   const onCardPress = (r: SavedRoute) => {
@@ -131,8 +159,8 @@ export default function HomeScreen({ onRace }: { onRace: (r: SavedRoute) => void
   };
 
   /**
-   * Search bar and filter buttons. 
-   * The search bar filters by route name, and the filter buttons filter by activity type and public/private status.
+   * Search bar and filter buttons.
+   * The search bar filters by route name; the chips filter by activity type and public routes only.
    */
   const searchUI = (
     <>
@@ -146,11 +174,7 @@ export default function HomeScreen({ onRace }: { onRace: (r: SavedRoute) => void
         />
         <Ionicons name="search" size={20} color={colors.primary} />
       </View>
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={s.chips}
-      >
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.chips}>
         <Chip label="Biking Tracks" icon="bicycle" on={filter === 'bike'} onPress={() => setFilter(filter === 'bike' ? null : 'bike')} />
         <Chip label="Running Tracks" icon="walk" on={filter === 'run'} onPress={() => setFilter(filter === 'run' ? null : 'run')} />
         <Chip label="Public" icon="globe-outline" on={publicOnly} onPress={() => setPublicOnly(!publicOnly)} />
@@ -160,13 +184,13 @@ export default function HomeScreen({ onRace }: { onRace: (r: SavedRoute) => void
 
   /**
    * Route cards.
-   * Each route card shows the route name, activity type, time to beat, distance. 
+   * Each card shows the route name, who it's from, public/private icon, activity type, time to beat and distance.
    */
   const cardsUI = (
     <>
       {visible.length === 0 && (
         <Text style={s.empty}>
-          {routes.length === 0
+          {routes.length + shared.length === 0
             ? 'No routes yet. Tap Record to create your first challenge.'
             : 'No routes match your search.'}
         </Text>
@@ -175,6 +199,7 @@ export default function HomeScreen({ onRace }: { onRace: (r: SavedRoute) => void
         const start = r.points[0];
         // Only measure from a live fix, never from a stale stored location.
         const away = isLive && position && start ? formatDistance(haversineDistance(position, start)) : null;
+        const mine = isMine(r);
         return (
           <Pressable key={r.id} style={s.card} onPress={() => onCardPress(r)}>
             <View style={s.cardHead}>
@@ -183,8 +208,18 @@ export default function HomeScreen({ onRace }: { onRace: (r: SavedRoute) => void
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={s.cardTitle} numberOfLines={1}>{r.name}</Text>
-                <Text style={s.cardSub}>{away ? `${away} away` : 'Beat your own ghost'}</Text>
+                <Text style={s.cardSub}>
+                  {away ? `${away} away` : mine ? 'Beat your own ghost' : 'Shared with you'}
+                </Text>
               </View>
+              {r.visibility && (
+                <Ionicons
+                  name={r.visibility === 'public' ? 'globe-outline' : 'lock-closed-outline'}
+                  size={16}
+                  color={colors.muted}
+                  accessibilityLabel={r.visibility === 'public' ? 'Public route' : 'Private route'}
+                />
+              )}
               <View style={s.tag}>
                 {!canChallenge && <Ionicons name="lock-closed" size={11} color={colors.text} />}
                 <Text style={s.tagText}>{(r.activity ?? 'run') === 'bike' ? 'Bike' : 'Run'}</Text>
@@ -196,7 +231,7 @@ export default function HomeScreen({ onRace }: { onRace: (r: SavedRoute) => void
                   color={r.upload?.state === 'done' ? colors.primary : colors.muted}
                 />
               </Pressable>
-              {isMine(r) && (
+              {mine && (
                 <Pressable onPress={() => remove(r)} hitSlop={8} accessibilityLabel="Delete route">
                   <Ionicons name="trash-outline" size={18} color={colors.muted} />
                 </Pressable>

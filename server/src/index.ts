@@ -19,6 +19,7 @@ if (!JWT_SECRET) {
 }
 
 const app = express();
+app.set("trust proxy", 1);
 const port = Number(process.env.PORT) || 4000;
 
 app.use(cors({ exposedHeaders: ["Retry-After"] }));

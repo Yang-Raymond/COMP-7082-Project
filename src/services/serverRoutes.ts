@@ -36,3 +36,23 @@ export async function fetchRoute(serverId: string): Promise<SavedRoute> {
     upload: { state: 'done', serverId: r.id },
   };
 }
+
+/**
+ * Routes made by other people that I'm allowed to see: public ones, and my accepted friends' private ones.
+ * Same shape as fetchRoute, so the Race screen treats them the same way. Never includes my own routes.
+ */
+export async function fetchSharedRoutes(): Promise<SavedRoute[]> {
+  const { routes } = await authedApi<{ routes: ServerRoute[] }>('/routes/shared');
+  return routes.map((r) => ({
+    id: `server-${r.id}`,
+    name: r.name,
+    createdAt: r.createdAt,
+    points: r.points,
+    distanceMeters: r.distanceMeters,
+    durationMs: r.durationMs,
+    elevationGainMeters: r.elevationGainMeters ?? 0,
+    activity: r.activity,
+    visibility: r.visibility,
+    upload: { state: 'done', serverId: r.id },
+  }));
+}
