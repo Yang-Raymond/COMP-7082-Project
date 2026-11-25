@@ -32,9 +32,9 @@ const CONTROL_CHARS = /[\u0000-\u001F\u007F]/; // Postgres rejects \u0000, and t
  * Because it runs on every request, removing a friend hides their private routes again right away.
  */
 const CAN_SEE = `(
-  r.creator_id = $2
-  OR r.visibility = 'public'
-  OR EXISTS (
+  r.creator_id = $2                  
+  OR r.visibility = 'public'         
+  OR EXISTS (                        
     SELECT 1 FROM friendships f
     WHERE f.status = 'accepted'
       AND ((f.requester_id = $2 AND f.addressee_id = r.creator_id)
@@ -280,6 +280,23 @@ routesRouter.get("/mine", async (req: Request, res: Response) => {
   }
 });
 
+// GET /routes/shared — routes by other people that I'm allowed to see: public ones and my friends' private ones.
+routesRouter.get("/shared", async (req: Request, res: Response) => {
+  try {
+    const { rows } = await pool.query<RouteRow>(
+      `${SELECT_ROUTES}
+       WHERE r.status = 'active' AND ${CAN_SEE}
+       ORDER BY r.created_at DESC, r.id DESC
+       LIMIT $1`,
+      [50, res.locals.userId]
+    );
+    res.json({ routes: rows.map(toRouteOut) });
+  } catch (e) {
+    console.error("GET /routes/shared failed:", e);
+    res.status(500).json({ error: "Server error." });
+  }
+});
+
 // GET /routes/:id — one route with its ghost points, for racing it.
 // Only if it's yours, public, or made by a friend. Anything else answers 404, the same as a route that
 // doesn't exist, so nobody can tell that a private route is there.
@@ -426,19 +443,3 @@ routesRouter.post("/:id/runs", async (req: Request, res: Response) => {
   }
 });
 
-// GET /routes/shared — routes by other people that I'm allowed to see: public ones and my friends' private ones.
-routesRouter.get("/shared", async (req: Request, res: Response) => {
-  try {
-    const { rows } = await pool.query<RouteRow>(
-      `${SELECT_ROUTES}
-       WHERE r.status = 'active' AND r.creator_id <> $2 AND ${CAN_SEE}
-       ORDER BY r.created_at DESC, r.id DESC
-       LIMIT $1`,
-      [50, res.locals.userId]
-    );
-    res.json({ routes: rows.map(toRouteOut) });
-  } catch (e) {
-    console.error("GET /routes/shared failed:", e);
-    res.status(500).json({ error: "Server error." });
-  }
-});
