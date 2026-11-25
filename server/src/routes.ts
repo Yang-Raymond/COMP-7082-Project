@@ -315,6 +315,75 @@ routesRouter.get("/:id", async (req: Request, res: Response) => {
   }
 });
 
+routesRouter.get("/:id/leaderboard", async (req: Request, res: Response) => {
+  if (!/^\d{1,9}$/.test(String(req.params.id))) return res.status(404).json({ error: "Route not found." });
+  const routeId = Number(req.params.id);
+  const me: number = res.locals.userId;
+
+  try {
+    const routeRes = await pool.query<{
+      id: number;
+      name: string;
+      distance_m: number;
+      activity: Activity;
+    }>(
+      `SELECT r.id, r.name, r.distance_m, r.activity
+       FROM routes r
+       WHERE r.id = $1 AND r.status = 'active' AND ${CAN_SEE}`,
+      [routeId, me]
+    );
+    const routeRow = routeRes.rows[0];
+    if (!routeRow) return res.status(404).json({ error: "Route not found." });
+
+    const { rows } = await pool.query<{
+      user_id: number;
+      username: string;
+      duration_ms: number;
+      started_ms: number;
+    }>(
+      `WITH best_runs AS (
+         SELECT DISTINCT ON (ru.user_id)
+           ru.user_id,
+           ru.duration_ms,
+           (extract(epoch FROM ru.started_at) * 1000)::float8 AS started_ms
+         FROM runs ru
+         WHERE ru.route_id = $1 AND NOT ru.flagged
+         ORDER BY ru.user_id, ru.duration_ms ASC, ru.id ASC
+       )
+       SELECT b.user_id,
+              u.username,
+              b.duration_ms,
+              b.started_ms
+       FROM best_runs b
+       JOIN users u ON u.id = b.user_id
+       ORDER BY b.duration_ms ASC, b.started_ms ASC`,
+      [routeId]
+    );
+
+    res.json({
+      route: {
+        id: String(routeRow.id),
+        name: routeRow.name,
+        distanceMeters: routeRow.distance_m,
+        activity: routeRow.activity,
+      },
+      entries: rows.map((r) => ({
+        rank: rows.filter((other) => other.duration_ms < r.duration_ms).length + 1,
+        userId: r.user_id,
+        username: r.username,
+        durationMs: r.duration_ms,
+        startedAt: Math.round(r.started_ms),
+        isMe: r.user_id === me,
+      })),
+    });
+  } catch (e) {
+    console.error("GET /routes/:id/leaderboard failed:", e);
+    res.status(500).json({ error: "Server error." });
+  }
+});
+
+
+
 // POST /routes/:id/visibility — the owner switches a route between public and private. Body: { visibility }.
 // (POST, not PATCH, because the app's api() helper only does GET and POST.)
 routesRouter.post("/:id/visibility", async (req: Request, res: Response) => {
@@ -336,18 +405,45 @@ routesRouter.post("/:id/visibility", async (req: Request, res: Response) => {
 
 // DELETE /routes/:id — hide one of your routes. Its runs are kept, as the "Archived" state in the design doc says.
 // Safe to retry: archiving a route that's already archived still answers 204.
-routesRouter.delete("/:id", async (req: Request, res: Response) => {
+// POST /routes/:id/delete — permanently remove one of your routes and its runs from the database.
+routesRouter.post("/:id/delete", async (req: Request, res: Response) => {
   if (!/^\d{1,9}$/.test(String(req.params.id))) return res.status(404).json({ error: "Route not found." });
+  const routeId = Number(req.params.id);
+  const userId: number = res.locals.userId;
+
+  let client: PoolClient | undefined;
+  let failure: Error | undefined;
   try {
-    const result = await pool.query(
-      `UPDATE routes SET status = 'archived' WHERE id = $1 AND creator_id = $2`,
-      [Number(req.params.id), res.locals.userId]
+    client = await pool.connect();
+    await client.query("BEGIN");
+
+    // Verify ownership first
+    const owned = await client.query(
+      `SELECT 1 FROM routes WHERE id = $1 AND creator_id = $2`,
+      [routeId, userId]
     );
-    if (result.rowCount === 0) return res.status(404).json({ error: "Route not found." });
-    res.status(204).end();
+    if (owned.rowCount === 0) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ error: "Route not found." });
+    }
+
+    // Delete dependent rows first so foreign keys don't block the route deletion
+    await client.query(
+      `DELETE FROM run_points WHERE run_id IN (SELECT id FROM runs WHERE route_id = $1)`,
+      [routeId]
+    );
+    await client.query(`DELETE FROM runs WHERE route_id = $1`, [routeId]);
+    await client.query(`DELETE FROM routes WHERE id = $1 AND creator_id = $2`, [routeId, userId]);
+
+    await client.query("COMMIT");
+    res.json({ ok: true });
   } catch (e) {
-    console.error("DELETE /routes/:id failed:", e);
+    failure = e as Error;
+    await client?.query("ROLLBACK").catch(() => {});
+    console.error("POST /routes/:id/delete failed:", e);
     res.status(500).json({ error: "Server error." });
+  } finally {
+    client?.release(failure);
   }
 });
 
