@@ -137,6 +137,7 @@ function Shell() {
       <FriendsScreen
         onSignIn={goSignIn}
         onRace={(r) => requireAuth('Sign in to race this challenge.', () => setRaceRoute(r))}
+        challenges={challenges}
       />
     );
   } else {

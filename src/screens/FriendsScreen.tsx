@@ -1,12 +1,15 @@
+// Friends tab: your requests, your crew (each with a menu to view, mute or remove), and a button to add people.
+// Muting a friend hides their challenges from you: their routes drop out of Explore, Challenges and the tab badge.
 import { Ionicons } from '@expo/vector-icons';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuthContext } from '../auth';
 import Avatar from '../components/Avatar';
 import PopoverMenu, { Anchor, MenuItem, ViewRef, measureAnchor } from '../components/PopoverMenu';
 import ProfileHeader from '../components/ProfileHeader';
 import { colors } from '../constants/ghostTheme';
+import type { Challenges } from '../hooks/useChallenges';
 import { confirmAction, showNotice } from '../services/dialog';
 import {
   Friend,
@@ -21,31 +24,33 @@ import {
   getRequests,
   getSuggestions,
   removeFriend,
-  sendRequest,
   setMuted,
 } from '../services/friends';
 import { fetchRoute } from '../services/serverRoutes';
 import type { SavedRoute } from '../types/route';
+import AddFriendsScreen from './AddFriendsScreen';
 
-/** `onSignIn` opens the sign-in screen and comes back here afterwards. `onRace` starts a race on a route. */
-export default function FriendsScreen({
-  onSignIn,
-  onRace,
-}: {
+interface Props {
+  /** Opens the sign-in screen and comes back here afterwards. */
   onSignIn: () => void;
+  /** Starts a race on a route. */
   onRace?: (r: SavedRoute) => void;
-}) {
+  /** Shared routes loaded by the app shell; reloaded here after a mute so hidden challenges disappear right away. */
+  challenges: Challenges;
+}
+
+export default function FriendsScreen({ onSignIn, onRace, challenges }: Props) {
   const insets = useSafeAreaInsets();
   const { isSignedIn } = useAuthContext();
   const root = useRef<ViewRef>(null);
   const [friends, setFriends] = useState<Friend[]>([]);
   const [requests, setRequests] = useState<FriendRequest[]>([]);
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
-  const [showRequests, setShowRequests] = useState(false);
-  const [newName, setNewName] = useState('');
+  const [showAllRequests, setShowAllRequests] = useState(false);
   const [query, setQuery] = useState('');
+  const [adding, setAdding] = useState(false);
   const [menu, setMenu] = useState<{ friend: Friend; anchor: Anchor } | null>(null);
-  const [viewing, setViewing] = useState<Friend | null>(null);
+  const [viewingId, setViewingId] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     try {
@@ -59,11 +64,13 @@ export default function FriendsScreen({
     }
   }, []);
 
-  // Runs a server action, then reloads both lists. Errors show as a notice.
+  // Runs a server action, then reloads the lists here and the shared routes (a mute, remove or accept changes
+  // which challenges you should see). Errors show as a notice.
   const run = async (fn: () => Promise<unknown>) => {
     try {
       await fn();
       await refresh();
+      challenges.reload();
     } catch (e) {
       showNotice('Friends', cleanError(e));
     }
@@ -80,15 +87,25 @@ export default function FriendsScreen({
     refresh();
   }, [isSignedIn, refresh]);
 
-  const visible = useMemo(() => {
-    const q = query.trim().toLowerCase();
+  const crew = useMemo(() => {
+    const q = query.trim().replace(/^@+/, '').toLowerCase();
     return friends.filter((f) => f.name.toLowerCase().includes(q) || f.username.toLowerCase().includes(q));
   }, [friends, query]);
+
+  // The newest route each friend made, which is the challenge to show next to their name
+  const nextByFriend = useMemo(() => {
+    const m = new Map<string, SavedRoute>();
+    for (const r of challenges.friendChallenges) {
+      const who = challenges.infoOf(r)?.creator?.toLowerCase();
+      if (who && !m.has(who)) m.set(who, r);
+    }
+    return m;
+  }, [challenges.friendChallenges, challenges.infoOf]);
 
   if (!isSignedIn) {
     return (
       <View style={[s.root, { paddingTop: insets.top + 8 }]}>
-        <View style={[s.header, { marginTop: 40 }]}>
+        <View style={[s.titleRow, { marginTop: 40 }]}>
           <Text style={s.title}>Friends</Text>
         </View>
         <View style={s.signedOut}>
@@ -102,64 +119,55 @@ export default function FriendsScreen({
     );
   }
 
-  if (viewing) return <FriendProfile friend={viewing} onBack={() => setViewing(null)} onRace={onRace} />;
+  if (adding) return <AddFriendsScreen suggestions={suggestions} friends={friends} onBack={() => setAdding(false)} />;
+
+  const viewing = viewingId ? friends.find((f) => f.id === viewingId) : undefined;
+
+  const toggleMute = (f: Friend) => run(() => setMuted(f.id, !f.muted));
+  const confirmRemove = (f: Friend) =>
+    confirmAction(`Remove ${f.name}?`, "You won't see their challenges any more.", 'Remove', () => run(() => removeFriend(f.id)));
+
+  if (viewing) {
+    return (
+      <FriendProfile
+        friend={viewing}
+        onBack={() => setViewingId(null)}
+        onRace={onRace}
+        onMute={() => toggleMute(viewing)}
+        onRemove={() => confirmRemove(viewing)}
+      />
+    );
+  }
 
   const openMenu = (friend: Friend, target: ViewRef | null) =>
     measureAnchor(target, root.current, (anchor) => setMenu({ friend, anchor }));
 
   const menuItems = (f: Friend): MenuItem[] => [
-    { label: 'View profile', icon: 'person-outline', onPress: () => setViewing(f) },
+    { label: 'View profile', icon: 'person-outline', onPress: () => setViewingId(f.id) },
     {
       label: f.muted ? 'Unmute challenges' : 'Mute challenges',
       icon: f.muted ? 'notifications-outline' : 'notifications-off-outline',
-      onPress: () => run(() => setMuted(f.id, !f.muted)),
+      onPress: () => toggleMute(f),
     },
-    {
-      label: 'Remove friend',
-      icon: 'person-remove-outline',
-      separated: true,
-      onPress: () =>
-        confirmAction(`Remove ${f.name}?`, "You won't see their challenges any more.", 'Remove', () =>
-          run(() => removeFriend(f.id))
-        ),
-    },
+    { label: 'Remove friend', icon: 'person-remove-outline', separated: true, onPress: () => confirmRemove(f) },
   ];
 
-  const submitNewFriend = () => {
-    const name = newName.trim();
-    if (!name) return;
-    run(async () => {
-      await sendRequest(name);
-      setNewName('');
-      showNotice('Friends', 'Request sent.');
-    });
-  };
+  const shownRequests = showAllRequests ? requests : requests.slice(0, 1);
 
   return (
     <View ref={root} style={[s.root, { paddingTop: insets.top + 8 }]}>
-      <View style={s.topRow}>
-        <Pressable hitSlop={8} accessibilityLabel="Friend requests" onPress={() => setShowRequests((v) => !v)}>
-          <Ionicons name="notifications-outline" size={26} color={colors.primary} />
-          {requests.length > 0 && (
-            <View style={s.badge}>
-              <Text style={s.badgeText}>{requests.length}</Text>
-            </View>
-          )}
+      <View style={s.titleRow}>
+        <Text style={s.title}>Friends</Text>
+        <Pressable style={s.addBtn} onPress={() => setAdding(true)} hitSlop={6} accessibilityLabel="Add friends">
+          <Ionicons name="person-add-outline" size={18} color={colors.onPrimary} />
         </Pressable>
       </View>
 
-      <View style={s.header}>
-        <Text style={s.title}>Friends</Text>
-        <Text style={s.count}>
-          {friends.length} {friends.length === 1 ? 'friend' : 'friends'}
-        </Text>
-      </View>
-
       <View style={s.search}>
-        <Ionicons name="search" size={22} color={colors.primary} />
+        <Ionicons name="search" size={16} color={colors.text} />
         <TextInput
           style={s.searchInput}
-          placeholder="Search friends"
+          placeholder="Search by name or @handle"
           placeholderTextColor={colors.muted}
           value={query}
           onChangeText={setQuery}
@@ -168,66 +176,56 @@ export default function FriendsScreen({
         />
       </View>
 
-      
-
-      <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 16 }}>
-        {showRequests && (
-          <View>
-            <Text style={s.sectionTitle}>Requests</Text>
-            {requests.length === 0 && <Text style={s.empty}>No pending requests.</Text>}
-            {requests.map((r) => (
-              <View key={r.id} style={s.row}>
-                <Avatar name={r.username} size={40} />
-                <Text style={[s.name, { flex: 1 }]} numberOfLines={1}>
-                  @{r.username}
-                </Text>
-                <Pressable style={s.accept} onPress={() => run(() => acceptRequest(r.id))}>
-                  <Text style={s.acceptText}>Accept</Text>
+      <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 24 }}>
+        {requests.length > 0 && (
+          <View style={s.section}>
+            <View style={s.labelRow}>
+              <Text style={s.smallLabel}>Requests · {requests.length}</Text>
+              {requests.length > 1 && (
+                <Pressable onPress={() => setShowAllRequests(!showAllRequests)} hitSlop={8}>
+                  <Text style={s.seeAll}>{showAllRequests ? 'Show less' : 'See all'}</Text>
                 </Pressable>
-                <Pressable onPress={() => run(() => declineRequest(r.id))}>
-                  <Text style={s.decline}>Decline</Text>
-                </Pressable>
-              </View>
-            ))}
-            <Text style={[s.sectionTitle, { marginTop: 16 }]}>Friends</Text>
-          </View>
-        )}
-
-        {visible.length === 0 && (
-          <Text style={s.empty}>{friends.length === 0 ? 'No friends yet.' : 'No friends match your search.'}</Text>
-        )}
-        {visible.map((f) => (
-          <FriendRow key={f.id} friend={f} open={menu?.friend.id === f.id} onMenu={(target) => openMenu(f, target)} />
-        ))}
-
-        {!query.trim() && suggestions.length > 0 && (
-          <View>
-            <Text style={[s.sectionTitle, { marginTop: 20 }]}>People you may know</Text>
-            {suggestions.map((u) => (
-              <View key={u.id} style={s.row}>
-                <Avatar name={u.username} size={40} />
-                <View style={{ flex: 1 }}>
-                  <Text style={s.name} numberOfLines={1}>{u.username}</Text>
-                  <Text style={s.handle} numberOfLines={1}>
-                    {u.mutual > 0 ? `${u.mutual} mutual ${u.mutual === 1 ? 'friend' : 'friends'}` : `@${u.username}`}
-                  </Text>
+              )}
+            </View>
+            <View style={s.requests}>
+              {shownRequests.map((r) => (
+                <View key={r.id} style={s.requestRow}>
+                  <Avatar name={r.username} size={40} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={s.name} numberOfLines={1}>{r.username}</Text>
+                    <Text style={s.sub} numberOfLines={1}>@{r.username} wants to be friends</Text>
+                  </View>
+                  <Pressable style={s.decline} onPress={() => run(() => declineRequest(r.id))} hitSlop={6} accessibilityLabel={`Decline ${r.username}`}>
+                    <Ionicons name="close" size={16} color={colors.text} />
+                  </Pressable>
+                  <Pressable style={s.accept} onPress={() => run(() => acceptRequest(r.id))} hitSlop={6} accessibilityLabel={`Accept ${r.username}`}>
+                    <Ionicons name="checkmark" size={16} color={colors.onPrimary} />
+                  </Pressable>
                 </View>
-                <Pressable
-                  style={s.accept}
-                  accessibilityLabel={`Send friend request to ${u.username}`}
-                  onPress={() =>
-                    run(async () => {
-                      await sendRequest(u.username);
-                      showNotice('Friends', `Request sent to ${u.username}.`);
-                    })
-                  }
-                >
-                  <Text style={s.acceptText}>Add</Text>
-                </Pressable>
-              </View>
-            ))}
+              ))}
+            </View>
           </View>
         )}
+
+        <View style={s.section}>
+          <Text style={[s.smallLabel, { marginBottom: 4 }]}>YOUR CREW · {friends.length}</Text>
+          {crew.length === 0 && (
+            <Text style={s.empty}>
+              {friends.length === 0 ? 'No friends yet. Tap the add button to find people.' : 'No friends match your search.'}
+            </Text>
+          )}
+          {crew.map((f) => (
+            <FriendRow
+              key={f.id}
+              friend={f}
+              next={f.muted ? undefined : nextByFriend.get(f.username.toLowerCase())}
+              open={menu?.friend.id === f.id}
+              onMenu={(target) => openMenu(f, target)}
+              onOpen={() => setViewingId(f.id)}
+              onRace={onRace}
+            />
+          ))}
+        </View>
       </ScrollView>
 
       {menu && <PopoverMenu anchor={menu.anchor} items={menuItems(menu.friend)} onClose={() => setMenu(null)} />}
@@ -235,20 +233,43 @@ export default function FriendsScreen({
   );
 }
 
-function FriendRow({ friend, open, onMenu }: { friend: Friend; open: boolean; onMenu: (target: ViewRef | null) => void }) {
+function FriendRow({
+  friend,
+  next,
+  open,
+  onMenu,
+  onOpen,
+  onRace,
+}: {
+  friend: Friend;
+  next?: SavedRoute;
+  open: boolean;
+  onMenu: (target: ViewRef | null) => void;
+  onOpen: () => void;
+  onRace?: (r: SavedRoute) => void;
+}) {
   const kebab = useRef<ViewRef>(null);
   return (
-    <View style={s.row}>
+    <Pressable style={s.row} onPress={onOpen}>
       <Avatar name={friend.name} size={40} />
       <View style={{ flex: 1 }}>
-        <View style={s.nameRow}>
-          <Text style={s.name} numberOfLines={1}>{friend.name}</Text>
-          {friend.muted && (
-            <Ionicons name="notifications-off-outline" size={13} color={colors.muted} accessibilityLabel="Challenges muted" />
-          )}
-        </View>
-        <Text style={s.handle} numberOfLines={1}>@{friend.username}</Text>
+        <Text style={s.name} numberOfLines={1}>{friend.name}</Text>
+        {friend.muted ? (
+          <View style={s.mutedRow}>
+            <Ionicons name="notifications-off-outline" size={12} color={colors.muted} />
+            <Text style={s.sub}>Challenges muted</Text>
+          </View>
+        ) : next ? (
+          <Text style={[s.sub, { color: colors.behind, fontWeight: '600' }]} numberOfLines={1}>Has a challenge for you</Text>
+        ) : (
+          <Text style={s.sub} numberOfLines={1}>@{friend.username}</Text>
+        )}
       </View>
+      {next && onRace && (
+        <Pressable style={({ pressed }) => [s.raceBtn, pressed && { opacity: 0.8 }]} onPress={() => onRace(next)} accessibilityLabel={`Race ${friend.name}`}>
+          <Text style={s.raceText}>Race</Text>
+        </Pressable>
+      )}
       <Pressable
         ref={kebab}
         hitSlop={8}
@@ -256,9 +277,9 @@ function FriendRow({ friend, open, onMenu }: { friend: Friend; open: boolean; on
         style={[s.kebab, open && s.kebabOpen]}
         onPress={() => onMenu(kebab.current)}
       >
-        <Ionicons name="ellipsis-vertical" size={18} color={colors.primary} />
+        <Ionicons name="ellipsis-vertical" size={18} color={colors.text} />
       </Pressable>
-    </View>
+    </Pressable>
   );
 }
 
@@ -268,19 +289,25 @@ function FriendProfile({
   friend,
   onBack,
   onRace,
+  onMute,
+  onRemove,
 }: {
   friend: Friend;
   onBack: () => void;
   onRace?: (r: SavedRoute) => void;
+  onMute: () => void;
+  onRemove: () => void;
 }) {
   const insets = useSafeAreaInsets();
-  const [activity, setActivity] = useState<'run' | 'bike'>('run');
+  const root = useRef<ViewRef>(null);
+  const dots = useRef<ViewRef>(null);
+  const [menu, setMenu] = useState<Anchor | null>(null);
   const [routes, setRoutes] = useState<SharedRoute[] | null>(null); // null = loading
 
   useEffect(() => {
     let alive = true;
     setRoutes(null);
-    getFriendRoutes(friend.id, activity)
+    getFriendRoutes(friend.id)
       .then((r) => alive && setRoutes(r))
       .catch((e) => {
         if (!alive) return;
@@ -290,7 +317,7 @@ function FriendProfile({
     return () => {
       alive = false;
     };
-  }, [friend.id, activity]);
+  }, [friend.id]);
 
   // Loads the tapped route from the server and starts a race on it
   const race = async (r: SharedRoute) => {
@@ -302,146 +329,109 @@ function FriendProfile({
     }
   };
 
+  const items: MenuItem[] = [
+    {
+      label: friend.muted ? 'Unmute challenges' : 'Mute challenges',
+      icon: friend.muted ? 'notifications-outline' : 'notifications-off-outline',
+      onPress: onMute,
+    },
+    { label: 'Remove friend', icon: 'person-remove-outline', separated: true, onPress: onRemove },
+  ];
+
   return (
-    <View style={[s.root, { paddingTop: insets.top + 8 }]}>
-      <Pressable style={s.back} onPress={onBack} hitSlop={8} accessibilityLabel="Back to friends">
-        <Ionicons name="chevron-back" size={24} color={colors.primary} />
-        <Text style={s.backText}>Friends</Text>
-      </Pressable>
+    <View ref={root} style={[s.root, { paddingTop: insets.top + 8 }]}>
+      <View style={s.profileTop}>
+        <Pressable onPress={onBack} hitSlop={10} accessibilityLabel="Back to friends">
+          <Ionicons name="arrow-back" size={22} color={colors.text} />
+        </Pressable>
+        <Pressable
+          ref={dots}
+          style={[s.kebab, !!menu && s.kebabOpen]}
+          hitSlop={8}
+          accessibilityLabel="More options"
+          onPress={() => measureAnchor(dots.current, root.current, setMenu)}
+        >
+          <Ionicons name="ellipsis-horizontal" size={20} color={colors.text} />
+        </Pressable>
+      </View>
+
       <ProfileHeader name={friend.name} username={friend.username} />
       {friend.muted && <Text style={s.note}>You&apos;ve muted challenges from {friend.name}.</Text>}
 
-      <View style={s.toggle}>
-        {(['run', 'bike'] as const).map((a) => (
-          <Pressable key={a} style={[s.toggleBtn, activity === a && s.toggleOn]} onPress={() => setActivity(a)}>
-            <Ionicons
-              name={a === 'run' ? 'walk-outline' : 'bicycle-outline'}
-              size={18}
-              color={activity === a ? colors.onPrimary : colors.primary}
-            />
-            <Text style={[s.toggleText, activity === a && { color: colors.onPrimary }]}>
-              {a === 'run' ? 'Running' : 'Biking'}
-            </Text>
-          </Pressable>
-        ))}
-      </View>
+      <Text style={[s.smallLabel, { paddingHorizontal: 16, marginTop: 24, marginBottom: 4 }]}>{friend.name.toUpperCase()}&apos;S ROUTES</Text>
 
-      <ScrollView contentContainerStyle={{ paddingBottom: 16 }}>
+      <ScrollView contentContainerStyle={{ paddingBottom: 24 }} showsVerticalScrollIndicator={false}>
         {routes === null && <Text style={s.empty}>Loading…</Text>}
-        {routes?.length === 0 && (
-          <Text style={s.empty}>{friend.name} hasn&apos;t saved any {activity === 'run' ? 'running' : 'biking'} challenges yet.</Text>
-        )}
+        {routes?.length === 0 && <Text style={s.empty}>{friend.name} hasn&apos;t saved any routes yet.</Text>}
         {routes?.map((r) => (
-          <Pressable key={r.id} style={s.row} onPress={() => race(r)} accessibilityLabel={`Race ${r.name}`}>
-            <Ionicons name={r.activity === 'run' ? 'walk-outline' : 'bicycle-outline'} size={26} color={colors.primary} />
+          <Pressable key={r.id} style={s.routeRow} onPress={() => race(r)} accessibilityLabel={`Race ${r.name}`}>
+            <Ionicons name={r.activity === 'run' ? 'walk-outline' : 'bicycle-outline'} size={20} color={colors.primary} />
             <View style={{ flex: 1 }}>
               <Text style={s.name} numberOfLines={1}>{r.name}</Text>
-              <Text style={s.handle}>
+              <Text style={s.sub}>
                 {km(r.distance_m)}
                 {r.elevation_gain_m ? ` · ${Math.round(r.elevation_gain_m)} m climb` : ''}
               </Text>
             </View>
-            <View style={s.tag}>
-              <Ionicons
-                name={r.visibility === 'public' ? 'globe-outline' : 'lock-closed-outline'}
-                size={12}
-                color={colors.muted}
-              />
-              <Text style={s.tagText}>{r.visibility === 'public' ? 'Public' : 'Friends'}</Text>
-            </View>
+            <Ionicons name="chevron-forward" size={16} color={colors.muted} />
           </Pressable>
         ))}
       </ScrollView>
+
+      {menu && <PopoverMenu anchor={menu} items={items} onClose={() => setMenu(null)} />}
     </View>
   );
 }
 
+const noOutline = Platform.OS === 'web' ? ({ outlineStyle: 'none' } as object) : {};
+
 const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
-  topRow: { flexDirection: 'row', justifyContent: 'flex-end', paddingHorizontal: 20, height: 32 },
-  header: { paddingHorizontal: 16, marginTop: 8 },
-  title: { fontSize: 28, fontWeight: '800', color: colors.primary },
-  count: { fontSize: 13, color: colors.muted, marginTop: 2 },
+  titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, marginTop: 12 },
+  title: { fontSize: 34, lineHeight: 36, fontWeight: '800', letterSpacing: -0.6, color: colors.text },
+  addBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.text, alignItems: 'center', justifyContent: 'center' },
   search: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    height: 46,
-    marginHorizontal: 16,
-    marginTop: 22,
-    marginBottom: 6,
+    height: 44,
+    marginHorizontal: 20,
+    marginTop: 18,
     paddingHorizontal: 16,
-    borderRadius: 23,
+    borderRadius: 22,
     borderWidth: 1,
-    borderColor: colors.lavender,
-    backgroundColor: colors.fieldBg,
+    borderColor: '#8E8AAE',
+    backgroundColor: '#fff',
   },
-  searchInput: { flex: 1, height: '100%', fontSize: 15, color: colors.text },
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    paddingHorizontal: 28,
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  nameRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  name: { fontSize: 15, fontWeight: '600', color: colors.primary, flexShrink: 1 },
-  handle: { fontSize: 12, color: colors.muted },
+  searchInput: { flex: 1, height: '100%', fontSize: 14, color: colors.text, ...noOutline },
+
+  section: { paddingHorizontal: 20, marginTop: 20 },
+  labelRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 },
+  smallLabel: { fontSize: 10, letterSpacing: 0.8, color: colors.muted },
+  seeAll: { fontSize: 12, fontWeight: '700', color: colors.primary },
+
+  requests: { backgroundColor: '#fff', borderRadius: 18, paddingHorizontal: 12, paddingVertical: 4 },
+  requestRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 8 },
+  decline: { width: 36, height: 36, borderRadius: 18, borderWidth: 1, borderColor: '#8E8AAE', alignItems: 'center', justifyContent: 'center' },
+  accept: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center' },
+
+  row: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.border },
+  name: { fontSize: 14, fontWeight: '700', color: colors.text },
+  sub: { fontSize: 11, color: colors.muted, marginTop: 1 },
+  mutedRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 1 },
+  raceBtn: { height: 34, paddingHorizontal: 20, borderRadius: 17, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center' },
+  raceText: { color: colors.onPrimary, fontSize: 13, fontWeight: '600' },
   kebab: { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
   kebabOpen: { backgroundColor: colors.border },
-  empty: { color: colors.muted, fontSize: 14, paddingHorizontal: 28, paddingVertical: 16 },
-  back: { flexDirection: 'row', alignItems: 'center', gap: 2, paddingHorizontal: 10, marginBottom: 16 },
-  backText: { fontSize: 16, color: colors.primary },
-  note: { color: colors.muted, fontSize: 13, paddingHorizontal: 14, marginTop: 16 },
+  empty: { color: colors.muted, fontSize: 14, paddingVertical: 12 },
+
   signedOut: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 14, paddingHorizontal: 32, paddingBottom: 60 },
   signedOutText: { fontSize: 16, color: colors.text, textAlign: 'center' },
-  loginBtn: {
-    height: 42,
-    paddingHorizontal: 40,
-    borderRadius: 12,
-    backgroundColor: colors.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+  loginBtn: { height: 42, paddingHorizontal: 40, borderRadius: 12, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center' },
   loginText: { color: colors.onPrimary, fontSize: 15, fontWeight: '600' },
 
-  // requests
-  badge: {
-    position: 'absolute',
-    top: -4,
-    right: -6,
-    minWidth: 16,
-    height: 16,
-    borderRadius: 8,
-    backgroundColor: '#E53935',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 3,
-  },
-  badgeText: { color: '#fff', fontSize: 10, fontWeight: '700' },
-  sectionTitle: { fontSize: 14, fontWeight: '700', color: colors.primary, paddingHorizontal: 28, marginTop: 12 },
-  accept: { backgroundColor: colors.primary, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 6 },
-  acceptText: { color: colors.onPrimary, fontWeight: '600', fontSize: 13 },
-  decline: { color: colors.muted, fontSize: 13, paddingHorizontal: 8 },
-
-  // friend profile routes
-  toggle: { flexDirection: 'row', gap: 10, paddingHorizontal: 16, marginTop: 20, marginBottom: 8 },
-  toggleBtn: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    height: 40,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: colors.lavender,
-    backgroundColor: colors.fieldBg,
-  },
-  toggleOn: { backgroundColor: colors.primary, borderColor: colors.primary },
-  toggleText: { fontSize: 14, fontWeight: '600', color: colors.primary },
-  tag: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  tagText: { fontSize: 11, color: colors.muted },
+  // friend profile
+  profileTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, marginBottom: 16 },
+  note: { color: colors.muted, fontSize: 13, paddingHorizontal: 20, marginTop: 12 },
+  routeRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 20, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: colors.border },
 });
