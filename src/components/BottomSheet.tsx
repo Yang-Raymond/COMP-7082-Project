@@ -1,6 +1,7 @@
 // Bottom sheet component that can be dragged up and down to reveal more content. 
 // Sheet has 3 positions: collapsed, half, and expanded.
 // The sheet has an optional accessory that can follow the sheet up to a certain point. 
+// The title can have something to its left (e.g. a stack of avatars).
 import React, { useEffect, useMemo, useState } from 'react';
 import { Animated, PanResponder, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { colors, shadow } from '../constants/ghostTheme';
@@ -30,11 +31,13 @@ function visibleFor(H: number): Record<Snap, number> {
  */
 interface BottomSheetProps {
   title: string;
+  /** Shown to the left of the title. */
+  titleLeft?: React.ReactNode;
   children: React.ReactNode;
   accessory?: React.ReactNode;
 }
 
-export default function BottomSheet({ title, children, accessory }: BottomSheetProps) {
+export default function BottomSheet({ title, titleLeft, children, accessory }: BottomSheetProps) {
   const [H, setH] = useState(0);
   const [snap, setSnap] = useState<Snap>('half');
   // Bumped on every drag release so the sheet re-settles even when the snap is unchanged.
@@ -110,7 +113,10 @@ export default function BottomSheet({ title, children, accessory }: BottomSheetP
           <View {...pan.panHandlers} style={s.header}>
             <View style={s.handle} />
             <View style={s.titleRow}>
-              <Text style={s.title}>{title}</Text>
+              <View style={s.titleLeft}>
+                {titleLeft}
+                <Text style={s.title}>{title}</Text>
+              </View>
             </View>
           </View>
           <ScrollView
@@ -134,5 +140,6 @@ const s = StyleSheet.create({
   header: { height: HEADER, paddingHorizontal: 20, paddingTop: 10, ...noSelect },
   handle: { alignSelf: 'center', width: 56, height: 5, borderRadius: 3, backgroundColor: colors.primary, marginBottom: 14 },
   titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  titleLeft: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   title: { fontSize: 20, fontWeight: '700', color: colors.primary },
 });

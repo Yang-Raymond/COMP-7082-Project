@@ -12,6 +12,7 @@ import { friendsRouter } from "./friends";
 import { clearLoginFailures, loginRateLimit, passwordResetRequestRateLimit, recordLoginFailure } from "./rateLimits";
 import { routesRouter } from "./routes";
 
+import { liveRouter } from "./liveRoutes";
 
 const JWT_SECRET = process.env.JWT_SECRET;
 if (!JWT_SECRET) {
@@ -43,6 +44,27 @@ type UserRow = {
 const publicUser = (u: UserRow) => ({ id: u.id, username: u.username, email: u.email, points: u.points });
 const makeToken = (u: UserRow) => jwt.sign({ sub: u.id }, JWT_SECRET, { expiresIn: "30d" });
 
+// Usernames: 3-20 characters, letters, numbers, _ or . (same rule as /account/username and the app's sign-up screen)
+const USERNAME_RE = /^[A-Za-z0-9_.]{3,20}$/;
+
+// At most 30 username checks per minute per IP (in memory, resets when the server restarts)
+const nameChecks = new Map<string, { n: number; resetAt: number }>();
+function usernameCheckLimit(req: Request, res: Response, next: NextFunction) {
+  const now = Date.now();
+  if (nameChecks.size > 10_000) nameChecks.clear();
+  const key = req.ip ?? "unknown";
+  const e = nameChecks.get(key);
+  if (!e || e.resetAt < now) {
+    nameChecks.set(key, { n: 1, resetAt: now + 60_000 });
+    return next();
+  }
+  if (++e.n > 30) {
+    res.set("Retry-After", String(Math.ceil((e.resetAt - now) / 1000)));
+    return res.status(429).json({ error: "Too many requests." });
+  }
+  next();
+}
+
 // ---------- health ----------
 
 app.get("/health", (req, res) => {
@@ -67,6 +89,9 @@ app.post("/auth/signup", async (req: Request, res: Response) => {
   const { username, email, password } = req.body ?? {};
   if (!username || !email || !password) {
     return res.status(400).json({ error: "Username, email and password are required." });
+  }
+  if (!USERNAME_RE.test(String(username).trim())) {
+    return res.status(400).json({ error: "Username must be 3-20 characters: letters, numbers, _ or ." });
   }
   if (String(password).length < 6) {
     return res.status(400).json({ error: "Password should be at least 6 characters." });
@@ -125,8 +150,21 @@ app.get("/auth/me", async (req: Request, res: Response) => {
   }
 });
 
-// ---------- routes and friends ----------
+// Public: the sign-up screen asks this while the person types. Answers { available }.
+app.get("/auth/username-available", usernameCheckLimit, async (req: Request, res: Response) => {
+  const username = String(req.query.username ?? "").trim();
+  if (!USERNAME_RE.test(username)) return res.json({ available: false });
+  try {
+    const { rowCount } = await pool.query("SELECT 1 FROM users WHERE lower(username) = lower($1)", [username]);
+    res.json({ available: !rowCount });
+  } catch (e) {
+    console.error("GET /auth/username-available failed:", e);
+    res.status(500).json({ error: "Server error." });
+  }
+});
 
+// ---------- routes and friends ----------
+app.use("/routes", liveRouter);
 app.use("/routes", routesRouter);
 app.use("/friends", friendsRouter);
 app.use("/account", accountRouter);

@@ -166,3 +166,10 @@ export function friendlyAuthError(e: unknown): string {
   if (m.includes('invalid or expired code')) return 'That code is wrong or has expired. Request a new one.';
   return msg;
 }
+
+export async function checkUsernameAvailable(username: string): Promise<boolean> {
+  const { available } = await api<{ available: boolean }>(
+    `/auth/username-available?username=${encodeURIComponent(username)}`
+  );
+  return available;
+}

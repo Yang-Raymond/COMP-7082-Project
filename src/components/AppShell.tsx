@@ -1,19 +1,21 @@
 import React, { useEffect, useState } from 'react';
-import { View, ActivityIndicator, AppState, Platform } from 'react-native';
-import TabBar, { Tab } from './TabBar';
-import HomeScreen from '../screens/HomeScreen';
-import RecordScreen from '../screens/RecordScreen';
-import RaceScreen from '../screens/RaceScreen';
-import FriendsScreen from '../screens/FriendsScreen';
-import YouScreen from '../screens/YouScreen';
-import OnboardingScreen from '../screens/OnboardingScreen';
+import { ActivityIndicator, AppState, Platform, View } from 'react-native';
 import { AuthProvider, SignInPrompt, useAuthContext } from '../auth';
-import { LocationProvider } from '../hooks/useCurrentPosition';
-import { RouteDraft, useRouteRecorder } from '../hooks/useRouteRecorder';
-import { setUploadAccount, uploadPendingRoutes } from '../services/routeSync';
-import { hasOnboarded, markOnboarded } from '../services/storage';
-import { SavedRoute } from '../types/route';
 import { colors } from '../constants/ghostTheme';
+import { useChallenges } from '../hooks/useChallenges';
+import { LocationProvider } from '../hooks/useCurrentPosition';
+import { useLiveHeartbeat } from '../hooks/useLiveHeartbeat';
+import { RouteDraft, useRouteRecorder } from '../hooks/useRouteRecorder';
+import ChallengesScreen from '../screens/ChallengesScreen';
+import FriendsScreen from '../screens/FriendsScreen';
+import HomeScreen from '../screens/HomeScreen';
+import OnboardingScreen from '../screens/OnboardingScreen';
+import RaceScreen from '../screens/RaceScreen';
+import RecordScreen from '../screens/RecordScreen';
+import YouScreen from '../screens/YouScreen';
+import { setUploadAccount, uploadPendingRoutes } from '../services/routeSync';
+import { SavedRoute } from '../types/route';
+import TabBar, { Tab } from './TabBar';
 
 function PhoneFrame({ children }: { children: React.ReactNode }) {
   return (
@@ -47,20 +49,19 @@ export default function AppShell() {
 function Shell() {
   const { session, loading, requireAuth, prompt, dismissPrompt } = useAuthContext();
   const [tab, setTab] = useState<Tab>('home');
-  const [returnTab, setReturnTab] = useState<Tab | null>(null); 
+  const [returnTab, setReturnTab] = useState<Tab | null>(null);
   const [raceRoute, setRaceRoute] = useState<SavedRoute | null>(null);
-  const [onboarded, setOnboarded] = useState<boolean | null>(null);
-  
-  const rec = useRouteRecorder();
-  const [draft, setDraft] = useState<RouteDraft | null>(null);
 
-  useEffect(() => {
-    hasOnboarded().then(setOnboarded).catch(() => setOnboarded(true));
-  }, []);
+  const rec = useRouteRecorder();
+  // Shared routes and who made them: used by Explore, Challenges and the tab badge
+  const challenges = useChallenges(session?.user?.id);
+  // While racing a route that's on the server, tell the server so the route's creator sees "Live now"
+  const racing = raceRoute?.upload;
+  useLiveHeartbeat(racing?.state === 'done' ? racing.serverId : null);
+  const [draft, setDraft] = useState<RouteDraft | null>(null);
 
   // Upload any "Save & Challenge" routes still waiting (saved while offline, or before the server was reachable):
   // when the app starts signed in, when someone signs in, and whenever the app comes back to the foreground
-  // (iPhones usually resume the app rather than restart it)
   useEffect(() => {
     setUploadAccount(session);
     if (session) uploadPendingRoutes().catch(() => {});
@@ -73,15 +74,10 @@ function Shell() {
     return () => sub.remove();
   }, []);
 
-  const finishOnboarding = () => {
-    markOnboarded();
-    setOnboarded(true);
-  };
-
   // After signing in from a prompt, show the tab the user was on before being sent to sign in.
   const activeTab = session && returnTab ? returnTab : tab;
 
-  if (loading || onboarded === null) {
+  if (loading) {
     return (
       <PhoneFrame>
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
@@ -91,18 +87,20 @@ function Shell() {
     );
   }
 
-  if (!onboarded && !session) {
+  // Not signed in: always onboarding. Signing out lands here too.
+  if (!session) {
     return (
       <PhoneFrame>
-        <OnboardingScreen onDone={finishOnboarding} />
+        <OnboardingScreen />
       </PhoneFrame>
     );
   }
 
   const changeTab = (t: Tab) => {
-    setRaceRoute(null); 
+    setRaceRoute(null);
     setReturnTab(null);
     setTab(t);
+    if (t === 'home' || t === 'challenges') challenges.reload(); // pick up new routes from friends
   };
 
   const goSignIn = () => {
@@ -114,11 +112,23 @@ function Shell() {
 
   let content: React.ReactNode;
   if (raceRoute) {
-    
     content = <RaceScreen route={raceRoute} rec={rec} onExit={() => setRaceRoute(null)} />;
   } else if (activeTab === 'home') {
     content = (
-      <HomeScreen onRace={(r) => requireAuth('Sign in to race this challenge.', () => setRaceRoute(r))} />
+      <HomeScreen
+        onRace={(r) => requireAuth('Sign in to race this challenge.', () => setRaceRoute(r))}
+        challenges={challenges}
+        onAddFriends={() => changeTab('friends')}
+        onRecord={() => changeTab('record')}
+      />
+    );
+  } else if (activeTab === 'challenges') {
+    content = (
+      <ChallengesScreen
+        challenges={challenges}
+        onRace={(r) => requireAuth('Sign in to race this challenge.', () => setRaceRoute(r))}
+        onAddFriends={() => changeTab('friends')}
+      />
     );
   } else if (activeTab === 'record') {
     content = <RecordScreen rec={rec} draft={draft} onDraft={setDraft} onSaved={() => changeTab('home')} />;
@@ -139,7 +149,7 @@ function Shell() {
   return (
     <PhoneFrame>
       <View style={{ flex: 1 }}>{content}</View>
-      {!fullScreen && <TabBar tab={activeTab} onChange={changeTab} />}
+      {!fullScreen && <TabBar tab={activeTab} onChange={changeTab} badges={{ challenges: challenges.newCount }} />}
       {prompt && <SignInPrompt reason={prompt.reason} onSignIn={goSignIn} onCancel={dismissPrompt} />}
     </PhoneFrame>
   );
