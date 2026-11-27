@@ -1,3 +1,5 @@
+// Owns auth gating, tab state, the record, save flow and the race flow, and switches between the screens in src/screens/.
+// It loads shared routes and my challenges once and passes them down.
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, AppState, Platform, View } from 'react-native';
 import { AuthProvider, SignInPrompt, useAuthContext } from '../auth';
@@ -6,6 +8,7 @@ import { useChallenges } from '../hooks/useChallenges';
 import { LocationProvider } from '../hooks/useCurrentPosition';
 import { useLiveHeartbeat } from '../hooks/useLiveHeartbeat';
 import { RouteDraft, useRouteRecorder } from '../hooks/useRouteRecorder';
+import { useSharedRoutes } from '../hooks/useSharedRoutes';
 import ChallengesScreen from '../screens/ChallengesScreen';
 import FriendsScreen from '../screens/FriendsScreen';
 import HomeScreen from '../screens/HomeScreen';
@@ -13,7 +16,10 @@ import OnboardingScreen from '../screens/OnboardingScreen';
 import RaceScreen from '../screens/RaceScreen';
 import RecordScreen from '../screens/RecordScreen';
 import YouScreen from '../screens/YouScreen';
+import { showNotice } from '../services/dialog';
+import { fetchRoute } from '../services/serverRoutes';
 import { setUploadAccount, uploadPendingRoutes } from '../services/routeSync';
+import type { ToRaceChallenge } from '../types/challenge';
 import { SavedRoute } from '../types/route';
 import TabBar, { Tab } from './TabBar';
 
@@ -53,7 +59,9 @@ function Shell() {
   const [raceRoute, setRaceRoute] = useState<SavedRoute | null>(null);
 
   const rec = useRouteRecorder();
-  // Shared routes and who made them: used by Explore, Challenges and the tab badge
+  // Shared routes and who made them
+  const sharedRoutes = useSharedRoutes(session?.user?.id);
+  // My challenges (To race / Sent / Finished)
   const challenges = useChallenges(session?.user?.id);
   // While racing a route that's on the server, tell the server so the route's creator sees "Live now"
   const racing = raceRoute?.upload;
@@ -100,8 +108,26 @@ function Shell() {
     setRaceRoute(null);
     setReturnTab(null);
     setTab(t);
-    if (t === 'home' || t === 'challenges') challenges.reload(); // pick up new routes from friends
+    if (t === 'home') sharedRoutes.reload(); 
+    if (t === 'challenges') challenges.reload();
   };
+
+  // Refresh challenges after exiting a race
+  const exitRace = () => {
+    setRaceRoute(null);
+    challenges.reload();
+  };
+
+  // Start racing a challenge: fetch the route, then show the race screen. If the route can't be fetched, show an error and reload challenges.
+  const startChallenge = (c: ToRaceChallenge) =>
+    requireAuth('Sign in to race this challenge.', async () => {
+      try {
+        setRaceRoute(await fetchRoute(c.route.id));
+      } catch (e) {
+        showNotice('Challenges', e instanceof Error && e.message ? e.message : "Couldn't open this challenge's route.");
+        challenges.reload();
+      }
+    });
 
   const goSignIn = () => {
     setReturnTab(activeTab);
@@ -112,23 +138,19 @@ function Shell() {
 
   let content: React.ReactNode;
   if (raceRoute) {
-    content = <RaceScreen route={raceRoute} rec={rec} onExit={() => setRaceRoute(null)} />;
+    content = <RaceScreen route={raceRoute} rec={rec} onExit={exitRace} />;
   } else if (activeTab === 'home') {
     content = (
       <HomeScreen
         onRace={(r) => requireAuth('Sign in to race this challenge.', () => setRaceRoute(r))}
-        challenges={challenges}
+        sharedRoutes={sharedRoutes}
         onAddFriends={() => changeTab('friends')}
         onRecord={() => changeTab('record')}
       />
     );
   } else if (activeTab === 'challenges') {
     content = (
-      <ChallengesScreen
-        challenges={challenges}
-        onRace={(r) => requireAuth('Sign in to race this challenge.', () => setRaceRoute(r))}
-        onAddFriends={() => changeTab('friends')}
-      />
+      <ChallengesScreen challenges={challenges} onStart={startChallenge} onRecord={() => changeTab('record')} />
     );
   } else if (activeTab === 'record') {
     content = <RecordScreen rec={rec} draft={draft} onDraft={setDraft} onSaved={() => changeTab('home')} />;
@@ -137,7 +159,7 @@ function Shell() {
       <FriendsScreen
         onSignIn={goSignIn}
         onRace={(r) => requireAuth('Sign in to race this challenge.', () => setRaceRoute(r))}
-        challenges={challenges}
+        sharedRoutes={sharedRoutes}
       />
     );
   } else {
@@ -150,7 +172,7 @@ function Shell() {
   return (
     <PhoneFrame>
       <View style={{ flex: 1 }}>{content}</View>
-      {!fullScreen && <TabBar tab={activeTab} onChange={changeTab} badges={{ challenges: challenges.newCount }} />}
+      {!fullScreen && <TabBar tab={activeTab} onChange={changeTab} badges={{ challenges: challenges.toRaceCount }} />}
       {prompt && <SignInPrompt reason={prompt.reason} onSignIn={goSignIn} onCancel={dismissPrompt} />}
     </PhoneFrame>
   );

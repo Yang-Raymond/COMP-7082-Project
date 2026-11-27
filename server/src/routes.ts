@@ -1,5 +1,6 @@
 // Route saving. The phone uploads a finished recording; the server keeps the route's path and the
 // creator's run with its per-point times, so the route can be raced as a ghost later.
+// Finishing a race on a route also settles the caller's open challenges on it (see challenges.ts).
 // Uploads are safe to retry: the phone sends its own clientId (a UUID), and sending the same one twice
 // returns the route that's already saved instead of making a copy (sequence diagram 6).
 //
@@ -31,7 +32,7 @@ const CONTROL_CHARS = /[\u0000-\u001F\u007F]/; // Postgres rejects \u0000, and t
  * Mine, or public, or made by someone I'm friends with (an accepted request; a pending one doesn't count).
  * Because it runs on every request, removing a friend hides their private routes again right away.
  */
-const CAN_SEE = `(
+export const CAN_SEE = `(
   r.creator_id = $2                  
   OR r.visibility = 'public'         
   OR EXISTS (                        
@@ -508,6 +509,16 @@ routesRouter.post("/:id/runs", async (req: Request, res: Response) => {
        SELECT $1, p.i, p.lat, p.lng, p.t_ms, p.alt_m
        FROM unnest($2::float8[], $3::float8[], $4::int[], $5::real[]) WITH ORDINALITY AS p(lat, lng, t_ms, alt_m, i)`,
       [run.rows[0].id, lats, lngs, times, alts]
+    );
+    // This is the caller's first completed race on the route, so it settles every challenge they were sent on it
+    // that hasn't expired. duration_ms is copied so the result outlives the run. Same transaction as the run itself.
+    await client.query(
+      `UPDATE challenge_recipients cr
+          SET run_id = $3, duration_ms = $4, raced_at = now()
+         FROM challenges c
+        WHERE c.id = cr.challenge_id AND cr.recipient_id = $1 AND cr.raced_at IS NULL
+          AND c.route_id = $2 AND (c.expires_at IS NULL OR c.expires_at > now())`,
+      [me, routeId, run.rows[0].id, Math.round(durationMs)]
     );
     await client.query("COMMIT");
 

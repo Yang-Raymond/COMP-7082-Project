@@ -1,12 +1,13 @@
 import bcrypt from "bcryptjs";
 import cors from "cors";
-import "dotenv/config"; // must stay first so db.ts can read process.env
+import "dotenv/config";
 import type { NextFunction, Request, Response } from "express";
 import express from "express";
 import jwt from "jsonwebtoken";
 import crypto from "node:crypto";
 import nodemailer from "nodemailer";
 import { accountRouter } from "./accountRoutes";
+import { challengesRouter } from "./challenges";
 import { pool } from "./db";
 import { friendsRouter } from "./friends";
 import { clearLoginFailures, loginRateLimit, passwordResetRequestRateLimit, recordLoginFailure } from "./rateLimits";
@@ -167,6 +168,7 @@ app.get("/auth/username-available", usernameCheckLimit, async (req: Request, res
 app.use("/routes", liveRouter);
 app.use("/routes", routesRouter);
 app.use("/friends", friendsRouter);
+app.use("/challenges", challengesRouter);
 app.use("/account", accountRouter);
 
 // ---------- password reset ----------

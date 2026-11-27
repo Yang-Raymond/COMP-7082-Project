@@ -6,7 +6,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, shadow } from '../constants/ghostTheme';
-import type { Info } from '../hooks/useChallenges';
+import type { Info } from '../hooks/useSharedRoutes';
 import { formatDistance, haversineDistance } from '../services/distance';
 import { formatKm, formatMinSec } from '../services/format';
 import { addRecent, clearRecents, getRecents } from '../services/recentSearches';

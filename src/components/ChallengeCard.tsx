@@ -1,24 +1,14 @@
-// One challenge. Collapsed: who, how far, and the time to beat. Expanded: the numbers and a Start button.
+// One route card on Explore. Collapsed: who, how far, and the time to beat. Expanded: the numbers and a Start button.
 import { Ionicons } from '@expo/vector-icons';
 import React from 'react';
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { colors, shadow } from '../constants/ghostTheme';
-import type { Info } from '../hooks/useChallenges';
-import { formatKm, formatMinSec } from '../services/format';
+import type { Info } from '../hooks/useSharedRoutes';
+import { formatKm, formatMinSec, timeAgo } from '../services/format';
 import type { SavedRoute } from '../types/route';
 import Avatar from './Avatar';
 
 const MONO = Platform.select({ ios: 'Menlo', android: 'monospace', default: 'monospace' });
-
-/** "2h ago", "5m ago", "3d ago" */
-function timeAgo(ms: number) {
-  const m = Math.max(0, Math.round((Date.now() - ms) / 60000));
-  if (m < 1) return 'just now';
-  if (m < 60) return `${m}m ago`;
-  const h = Math.round(m / 60);
-  if (h < 24) return `${h}h ago`;
-  return `${Math.round(h / 24)}d ago`;
-}
 
 interface Props {
   route: SavedRoute;

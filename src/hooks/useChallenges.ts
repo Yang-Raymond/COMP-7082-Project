@@ -1,51 +1,42 @@
-// Loads the routes other people shared with me (public + friends') and who made each one, in one place,
-// so the Explore screen, the Challenges screen and the tab badge all read the same data.
-// A "challenge" is a route made by a friend. There is no separate challenge record on the server yet.
-// Routes made by a friend I've muted are left out everywhere, so their challenges never show up for me.
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { getFeed, getFriends, type SharedRoute } from '../services/friends';
-import { fetchSharedRoutes } from '../services/serverRoutes';
-import type { SavedRoute } from '../types/route';
+// Loads the signed-in user's challenges (To race, Sent, Finished) from the server, in one place,
+// so the Challenges screen and the tab badge read the same data.
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { getChallenges } from '../services/challenges';
+import type { ChallengeLists } from '../types/challenge';
 
-/** Who made a shared route, and whether they're my friend. Comes from /friends/feed, matched by route id. */
-export type Info = { creator: string; byFriend: boolean };
+const EMPTY: ChallengeLists = { toRace: [], sent: [], finished: [] };
 
-// The tab badge counts friends' routes from the last day
-const NEW_WINDOW_MS = 24 * 60 * 60 * 1000;
-
+/**
+ * Loads the challenge lists for `userId` and exposes them with a loading flag,
+ * an error message (null when fine), a reload function and the To race count for the tab badge.
+ * A load that finishes after a newer one started, or after the user changed, is ignored. The lists stay on
+ * screen during a reload. Only the first load reports `loading`.
+ */
 export function useChallenges(userId?: number) {
-  const [allShared, setAllShared] = useState<SavedRoute[]>([]);
-  const [info, setInfo] = useState<Record<string, Info>>({});
-  const [mutedNames, setMutedNames] = useState<Set<string>>(new Set()); // lower-case usernames I've muted
+  const [lists, setLists] = useState<ChallengeLists>(EMPTY);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const latest = useRef(0);
 
   const reload = useCallback(async () => {
     const mine = ++latest.current;
     if (!userId) {
-      setAllShared([]);
-      setInfo({});
-      setMutedNames(new Set());
+      setLists(EMPTY);
+      setError(null);
+      setLoading(false);
       return;
     }
+    setLoading(true);
     try {
-      // The feed only adds names, and the friends list only adds mutes; if either fails the routes still load
-      const [list, feed, friends] = await Promise.all([
-        fetchSharedRoutes(),
-        getFeed('all').catch(() => [] as SharedRoute[]),
-        getFriends().catch(() => null),
-      ]);
-      if (mine !== latest.current) return; // a newer load (or a different user) took over
-      const next: Record<string, Info> = {};
-      for (const f of feed) next[String(f.id)] = { creator: f.creator, byFriend: !!f.by_friend };
-      setAllShared(list);
-      setInfo(next);
-      if (friends) setMutedNames(new Set(friends.filter((f) => f.muted).map((f) => f.username.toLowerCase())));
+      const next = await getChallenges();
+      if (mine !== latest.current) return;
+      setLists(next);
+      setError(null);
     } catch (e) {
-      console.warn('[challenges] could not load shared routes', e);
-      if (mine === latest.current) {
-        setAllShared([]);
-        setInfo({});
-      }
+      console.warn('[challenges] could not load challenges', e);
+      if (mine === latest.current) setError(e instanceof Error && e.message ? e.message : "Couldn't load challenges.");
+    } finally {
+      if (mine === latest.current) setLoading(false);
     }
   }, [userId]);
 
@@ -53,29 +44,7 @@ export function useChallenges(userId?: number) {
     reload();
   }, [reload]);
 
-  const infoOf = useCallback((r: SavedRoute) => info[r.id.replace(/^server-/, '')], [info]);
-
-  // Shared routes without the ones made by someone I've muted
-  const shared = useMemo(
-    () =>
-      allShared.filter((r) => {
-        const who = info[r.id.replace(/^server-/, '')]?.creator?.toLowerCase();
-        return !who || !mutedNames.has(who);
-      }),
-    [allShared, info, mutedNames]
-  );
-
-  const friendChallenges = useMemo(
-    () => shared.filter((r) => info[r.id.replace(/^server-/, '')]?.byFriend).sort((a, b) => b.createdAt - a.createdAt),
-    [shared, info]
-  );
-
-  const newCount = useMemo(
-    () => friendChallenges.filter((r) => Date.now() - r.createdAt < NEW_WINDOW_MS).length,
-    [friendChallenges]
-  );
-
-  return { shared, info, infoOf, friendChallenges, newCount, reload };
+  return { ...lists, loading, error, reload, toRaceCount: lists.toRace.length };
 }
 
 export type Challenges = ReturnType<typeof useChallenges>;

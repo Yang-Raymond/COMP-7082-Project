@@ -1,6 +1,5 @@
 -- GhostRacer schema (PostgreSQL + PostGIS)
--- Apply with:
---   npm run db:setup      (from the server folder)
+-- Apply with: npm run db:schema from /server
 
 CREATE EXTENSION IF NOT EXISTS postgis;
 
@@ -92,3 +91,27 @@ CREATE TABLE IF NOT EXISTS friendships (
 
 CREATE UNIQUE INDEX IF NOT EXISTS uq_friendship_pair
   ON friendships (LEAST(requester_id, addressee_id), GREATEST(requester_id, addressee_id));
+-- Challenges. One sender challenges one or more friends to beat their time on a route.
+CREATE TABLE IF NOT EXISTS challenges (
+  id         INTEGER     GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  route_id   INTEGER     NOT NULL REFERENCES routes (id) ON DELETE CASCADE,
+  sender_id  INTEGER     NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+  sender_ms  INTEGER     NOT NULL, --sender's best time on the route when the challenge was sent
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  expires_at TIMESTAMPTZ, -- optional expiration time
+  CHECK (expires_at IS NULL OR expires_at > created_at)
+);
+
+CREATE INDEX IF NOT EXISTS idx_challenges_sender ON challenges (sender_id);
+
+CREATE TABLE IF NOT EXISTS challenge_recipients (
+  challenge_id INTEGER     NOT NULL REFERENCES challenges (id) ON DELETE CASCADE,
+  recipient_id INTEGER     NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+  run_id       INTEGER     REFERENCES runs (id) ON DELETE SET NULL,
+  duration_ms  INTEGER,
+  raced_at     TIMESTAMPTZ,
+  PRIMARY KEY (challenge_id, recipient_id)
+);
+
+-- Challenges that haven't been raced yet
+CREATE INDEX IF NOT EXISTS idx_challenge_recipients_pending ON challenge_recipients (recipient_id) WHERE raced_at IS NULL;

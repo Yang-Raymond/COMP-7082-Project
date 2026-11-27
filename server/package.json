@@ -7,7 +7,7 @@
     "dev:local": "tsx watch --env-file=.env.local src/index.ts",
     "tunnel": "tsx src/tunnel.ts",
     "db:schema": "tsx --env-file=.env src/apply-schema.ts",
-    "test": "tsx --test ../tests/unit/services/fixFilter.test.ts"
+    "test": "tsx --test ../tests/unit/services/fixFilter.test.ts ../tests/unit/services/format.test.ts"
   },
   "keywords": [],
   "author": "",

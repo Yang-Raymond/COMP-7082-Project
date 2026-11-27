@@ -1,4 +1,4 @@
-// Explore screen: map with a search bar and filter chips, plus a bottom sheet listing nearby challenges.
+// Explore screen: map with a search bar and filter chips, plus a bottom sheet listing nearby routes.
 // Every listed route gets a pin at its start. Tapping a pin or a card selects the route (draws it and zooms to fit).
 // The selected card expands to show Distance, Time to beat and a Start button; tapping it again collapses it.
 // The list has your own routes (from this phone) plus routes shared with you by the server (public + friends').
@@ -16,7 +16,7 @@ import GhostMap from '../components/GhostMap';
 import LiveStrip from '../components/LiveStrip';
 import LocationButton from '../components/LocationButton';
 import { colors, shadow } from '../constants/ghostTheme';
-import type { Challenges } from '../hooks/useChallenges';
+import type { SharedRoutes } from '../hooks/useSharedRoutes';
 import { useCurrentPosition } from '../hooks/useCurrentPosition';
 import { useLiveChallengers } from '../hooks/useLiveChallengers';
 import { showNotice } from '../services/dialog';
@@ -47,18 +47,18 @@ function Chip({ label, icon, on, onPress }: { label: string; icon?: IconName; on
 interface Props {
   onRace: (r: SavedRoute) => void;
   /** Shared routes and who made them (loaded once in the app shell). */
-  challenges: Challenges;
+  sharedRoutes: SharedRoutes;
   /** "Add friends" button in the empty state. */
   onAddFriends?: () => void;
   /** "Record a route" button in the empty state. */
   onRecord?: () => void;
 }
 
-export default function HomeScreen({ onRace, challenges, onAddFriends, onRecord }: Props) {
+export default function HomeScreen({ onRace, sharedRoutes, onAddFriends, onRecord }: Props) {
   const insets = useSafeAreaInsets();
   const mapRef = useRef<GhostMapHandle>(null);
   const { user } = useAuthContext();
-  const { shared, info, infoOf } = challenges;
+  const { shared, info, infoOf } = sharedRoutes;
   const live = useLiveChallengers();
   const [routes, setRoutes] = useState<SavedRoute[]>([]); // saved on this phone
   const [query, setQuery] = useState('');

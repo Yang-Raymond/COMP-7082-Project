@@ -1,5 +1,4 @@
-// Friends tab: your requests, your crew (each with a menu to view, mute or remove), and a button to add people.
-// Muting a friend hides their challenges from you: their routes drop out of Explore, Challenges and the tab badge.
+// Friends tab: requests, your friends, and a button to add people.
 import { Ionicons } from '@expo/vector-icons';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
@@ -9,7 +8,7 @@ import Avatar from '../components/Avatar';
 import PopoverMenu, { Anchor, MenuItem, ViewRef, measureAnchor } from '../components/PopoverMenu';
 import ProfileHeader from '../components/ProfileHeader';
 import { colors } from '../constants/ghostTheme';
-import type { Challenges } from '../hooks/useChallenges';
+import type { SharedRoutes } from '../hooks/useSharedRoutes';
 import { confirmAction, showNotice } from '../services/dialog';
 import {
   Friend,
@@ -35,11 +34,11 @@ interface Props {
   onSignIn: () => void;
   /** Starts a race on a route. */
   onRace?: (r: SavedRoute) => void;
-  /** Shared routes loaded by the app shell; reloaded here after a mute so hidden challenges disappear right away. */
-  challenges: Challenges;
+  /** Shared routes loaded by the app shell. Reloaded here after a mute so hidden routes disappear right away. */
+  sharedRoutes: SharedRoutes;
 }
 
-export default function FriendsScreen({ onSignIn, onRace, challenges }: Props) {
+export default function FriendsScreen({ onSignIn, onRace, sharedRoutes }: Props) {
   const insets = useSafeAreaInsets();
   const { isSignedIn } = useAuthContext();
   const root = useRef<ViewRef>(null);
@@ -70,13 +69,13 @@ export default function FriendsScreen({ onSignIn, onRace, challenges }: Props) {
     try {
       await fn();
       await refresh();
-      challenges.reload();
+      sharedRoutes.reload();
     } catch (e) {
       showNotice('Friends', cleanError(e));
     }
   };
 
-  // Load when signed in (also after logging in from this screen); clear when signed out.
+  // Load when signed in. Clear when signed out.
   useEffect(() => {
     if (!isSignedIn) {
       setFriends([]);
@@ -93,14 +92,15 @@ export default function FriendsScreen({ onSignIn, onRace, challenges }: Props) {
   }, [friends, query]);
 
   // The newest route each friend made, which is the challenge to show next to their name
+  const { friendRoutes, infoOf } = sharedRoutes;
   const nextByFriend = useMemo(() => {
     const m = new Map<string, SavedRoute>();
-    for (const r of challenges.friendChallenges) {
-      const who = challenges.infoOf(r)?.creator?.toLowerCase();
+    for (const r of friendRoutes) {
+      const who = infoOf(r)?.creator?.toLowerCase();
       if (who && !m.has(who)) m.set(who, r);
     }
     return m;
-  }, [challenges.friendChallenges, challenges.infoOf]);
+  }, [friendRoutes, infoOf]);
 
   if (!isSignedIn) {
     return (

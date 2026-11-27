@@ -19,6 +19,9 @@ export const colors = {
   ahead: '#0f9d75',
   behind: '#c62828',
   warning: '#b26a00',
+  warningBg: '#fff4e0', // background of an "expiring soon" card
+  warningBorder: '#f0d49a',
+  track: '#e9ecff', // background of the segmented tabs' track
 };
 
 export const shadow = {
