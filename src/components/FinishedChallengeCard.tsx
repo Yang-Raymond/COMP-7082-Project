@@ -1,7 +1,7 @@
 // One finished race against one opponent: avatar, "Opponent · Route", "Date · your time vs their time",
-// the time difference on the right and Won / Lost / Tied.
+// the time difference on the right and Won / Lost / Tied. Tapping the card opens the challenge detail.
 import React from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { colors } from '../constants/ghostTheme';
 import { formatDelta, formatMinSec } from '../services/format';
 import type { FinishedChallenge } from '../types/challenge';
@@ -19,10 +19,20 @@ function outcomeOf(mineMs: number, theirsMs: number): Outcome {
 /** the day the race was finished. */
 const day = (ms: number) => new Date(ms).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 
-export default function FinishedChallengeCard({ challenge: c }: { challenge: FinishedChallenge }) {
+interface Props {
+  challenge: FinishedChallenge;
+  onPress: () => void;
+}
+
+export default function FinishedChallengeCard({ challenge: c, onPress }: Props) {
   const outcome = outcomeOf(c.mineMs, c.theirsMs);
   return (
-    <View style={s.card}>
+    <Pressable
+      style={s.card}
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={`Finished race against ${c.opponent} on ${c.route.name}, open details`}
+    >
       <Avatar name={c.opponent} size={40} />
       <View style={s.body}>
         <Text style={s.title} numberOfLines={1}>
@@ -36,7 +46,7 @@ export default function FinishedChallengeCard({ challenge: c }: { challenge: Fin
         <Text style={[s.delta, { color: outcome.color }]}>{formatDelta(c.mineMs - c.theirsMs)}</Text>
         <Text style={[s.outcome, { color: outcome.color }]}>{outcome.label}</Text>
       </View>
-    </View>
+    </Pressable>
   );
 }
 

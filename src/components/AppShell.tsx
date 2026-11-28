@@ -1,4 +1,4 @@
-// Owns auth gating, tab state, the record, save flow and the race flow, and switches between the screens in src/screens/.
+// Owns auth gating, tab state, the record, save flow, the race flow and the challenge detail, and switches between the screens in src/screens/.
 // It loads shared routes and my challenges once and passes them down.
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, AppState, Platform, View } from 'react-native';
@@ -9,7 +9,8 @@ import { LocationProvider } from '../hooks/useCurrentPosition';
 import { useLiveHeartbeat } from '../hooks/useLiveHeartbeat';
 import { RouteDraft, useRouteRecorder } from '../hooks/useRouteRecorder';
 import { useSharedRoutes } from '../hooks/useSharedRoutes';
-import ChallengesScreen from '../screens/ChallengesScreen';
+import ChallengeDetailScreen from '../screens/ChallengeDetailScreen';
+import ChallengesScreen, { ChallengeTab } from '../screens/ChallengesScreen';
 import FriendsScreen from '../screens/FriendsScreen';
 import HomeScreen from '../screens/HomeScreen';
 import OnboardingScreen from '../screens/OnboardingScreen';
@@ -19,7 +20,7 @@ import YouScreen from '../screens/YouScreen';
 import { showNotice } from '../services/dialog';
 import { fetchRoute } from '../services/serverRoutes';
 import { setUploadAccount, uploadPendingRoutes } from '../services/routeSync';
-import type { ToRaceChallenge } from '../types/challenge';
+import type { ChallengeDetailTarget, ToRaceChallenge } from '../types/challenge';
 import { SavedRoute } from '../types/route';
 import TabBar, { Tab } from './TabBar';
 
@@ -57,6 +58,8 @@ function Shell() {
   const [tab, setTab] = useState<Tab>('home');
   const [returnTab, setReturnTab] = useState<Tab | null>(null);
   const [raceRoute, setRaceRoute] = useState<SavedRoute | null>(null);
+  const [challengeTab, setChallengeTab] = useState<ChallengeTab>('toRace');
+  const [detail, setDetail] = useState<ChallengeDetailTarget | null>(null);
 
   const rec = useRouteRecorder();
   // Shared routes and who made them
@@ -106,15 +109,17 @@ function Shell() {
 
   const changeTab = (t: Tab) => {
     setRaceRoute(null);
+    setDetail(null);
     setReturnTab(null);
     setTab(t);
     if (t === 'home') sharedRoutes.reload(); 
     if (t === 'challenges') challenges.reload();
   };
 
-  // Refresh challenges after exiting a race
+  // Leaving a race returns to the challenge list and refreshes the challenges so the raced one moves to Finished.
   const exitRace = () => {
     setRaceRoute(null);
+    setDetail(null);
     challenges.reload();
   };
 
@@ -148,9 +153,24 @@ function Shell() {
         onRecord={() => changeTab('record')}
       />
     );
+  } else if (activeTab === 'challenges' && detail) {
+    content = (
+      <ChallengeDetailScreen
+        target={detail}
+        onBack={() => setDetail(null)}
+        onStart={(r) => requireAuth('Sign in to race this challenge.', () => setRaceRoute(r))}
+      />
+    );
   } else if (activeTab === 'challenges') {
     content = (
-      <ChallengesScreen challenges={challenges} onStart={startChallenge} onRecord={() => changeTab('record')} />
+      <ChallengesScreen
+        challenges={challenges}
+        tab={challengeTab}
+        onTabChange={setChallengeTab}
+        onOpen={setDetail}
+        onStart={startChallenge}
+        onRecord={() => changeTab('record')}
+      />
     );
   } else if (activeTab === 'record') {
     content = <RecordScreen rec={rec} draft={draft} onDraft={setDraft} onSaved={() => changeTab('home')} />;
@@ -166,8 +186,8 @@ function Shell() {
     content = <YouScreen />;
   }
 
-  // Recording, reviewing a run and racing are full-screen in the Figma
-  const fullScreen = rec.status !== 'idle' || draft !== null || raceRoute !== null;
+  // Recording, reviewing a run, racing and the challenge detail are full-screen in the Figma
+  const fullScreen = rec.status !== 'idle' || draft !== null || raceRoute !== null || (activeTab === 'challenges' && detail !== null);
 
   return (
     <PhoneFrame>

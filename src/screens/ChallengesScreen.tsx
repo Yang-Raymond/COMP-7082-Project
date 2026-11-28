@@ -1,5 +1,6 @@
 // Challenges tab: challenges between users and his friends, in three tabs.
 //   To race:  challenges friends sent to the user that the user haven't raced yet, soonest expiry first. Start opens the race.
+// Tapping any card opens the challenge detail. The selected tab is owned by the parent so it survives opening the detail.
 //   Sent:     challenges the user sent that are still open, one card per challenge with all its recipients.
 //   Finished: races that are done, with who won.
 import { Ionicons } from '@expo/vector-icons';
@@ -12,12 +13,17 @@ import SentChallengeCard from '../components/SentChallengeCard';
 import ToRaceCard from '../components/ToRaceCard';
 import { colors } from '../constants/ghostTheme';
 import type { Challenges } from '../hooks/useChallenges';
-import type { ToRaceChallenge } from '../types/challenge';
+import type { ChallengeDetailTarget, ToRaceChallenge } from '../types/challenge';
 
-type TabKey = 'toRace' | 'sent' | 'finished';
+export type ChallengeTab = 'toRace' | 'sent' | 'finished';
 
 interface Props {
   challenges: Challenges;
+  /** The selected tab, owned by the parent so coming back from the detail lands on the same tab. */
+  tab: ChallengeTab;
+  onTabChange: (tab: ChallengeTab) => void;
+  /** Open a challenge's detail screen. */
+  onOpen: (target: ChallengeDetailTarget) => void;
   /** Start racing a To race challenge. */
   onStart: (c: ToRaceChallenge) => void;
   /** The "Record a route" button in the empty To race state. */
@@ -25,9 +31,8 @@ interface Props {
 }
 
 /** Shows the title, the three tabs and the selected list, or a loading, error or empty state. */
-export default function ChallengesScreen({ challenges, onStart, onRecord }: Props) {
+export default function ChallengesScreen({ challenges, tab, onTabChange, onOpen, onStart, onRecord }: Props) {
   const insets = useSafeAreaInsets();
-  const [tab, setTab] = useState<TabKey>('toRace');
   const { toRace, sent, finished, loading, error, reload } = challenges;
   const firstLoad = loading && toRace.length + sent.length + finished.length === 0;
   const [now, setNow] = useState(() => Date.now());  // The time the cards count down from, refreshes every minute.
@@ -64,7 +69,13 @@ export default function ChallengesScreen({ challenges, onStart, onRecord }: Prop
         <>
           <Text style={s.order}>Soonest first</Text>
           {toRace.map((c) => (
-            <ToRaceCard key={c.id} challenge={c} now={now} onStart={() => onStart(c)} />
+            <ToRaceCard
+              key={c.id}
+              challenge={c}
+              now={now}
+              onPress={() => onOpen({ kind: 'toRace', challenge: c })}
+              onStart={() => onStart(c)}
+            />
           ))}
         </>
       );
@@ -73,14 +84,18 @@ export default function ChallengesScreen({ challenges, onStart, onRecord }: Prop
       sent.length === 0 ? (
         <Text style={s.emptyText}>You haven&apos;t sent any open challenges.</Text>
       ) : (
-        sent.map((c) => <SentChallengeCard key={c.id} challenge={c} now={now} />)
+        sent.map((c) => (
+          <SentChallengeCard key={c.id} challenge={c} now={now} onPress={() => onOpen({ kind: 'sent', challenge: c })} />
+        ))
       );
   } else {
     body =
       finished.length === 0 ? (
         <Text style={s.emptyText}>No finished challenges yet.</Text>
       ) : (
-        finished.map((c) => <FinishedChallengeCard key={c.id} challenge={c} />)
+        finished.map((c) => (
+          <FinishedChallengeCard key={c.id} challenge={c} onPress={() => onOpen({ kind: 'finished', challenge: c })} />
+        ))
       );
   }
 
@@ -95,7 +110,7 @@ export default function ChallengesScreen({ challenges, onStart, onRecord }: Prop
             { key: 'finished', label: 'Finished' },
           ]}
           selected={tab}
-          onChange={setTab}
+          onChange={onTabChange}
         />
       </View>
       <ScrollView contentContainerStyle={s.content} showsVerticalScrollIndicator={false}>

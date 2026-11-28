@@ -1,5 +1,6 @@
 // Shapes of the challenge data the server sends from GET /challenges (see server/src/challenges.ts).
 // All times are in milliseconds: durations (senderMs, mineMs, ...) and epoch timestamps (createdAt, expiresAt, racedAt).
+// Also defines ChallengeDetailTarget: which challenge (and from which tab) the detail screen is showing.
 import type { ActivityType } from './route';
 
 /** The route a challenge is on, summarised for the lists. `id` is the server route id (what fetchRoute takes). */
@@ -62,3 +63,9 @@ export interface ChallengeLists {
   sent: SentChallenge[];
   finished: FinishedChallenge[];
 }
+
+/** The challenge the detail screen is showing. `kind` says which tab it was opened from (it decides the labels and whether Start shows). */
+export type ChallengeDetailTarget =
+  | { kind: 'toRace'; challenge: ToRaceChallenge }
+  | { kind: 'sent'; challenge: SentChallenge }
+  | { kind: 'finished'; challenge: FinishedChallenge };

@@ -37,6 +37,8 @@ export interface GhostMapProps {
   initialBounds?: LatLng[];
   /** Draw the user's location dot. */
   showUser?: boolean;
+  /** Draw a hollow ring at the start of `path` and a filled dot at its end. Needs at least 2 path points. */
+  showEndpoints?: boolean;
   /** Zoom the camera to fit the whole path instead of following the user. */
   fitPath?: boolean;
   /** Path color. */

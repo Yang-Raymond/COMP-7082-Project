@@ -1,5 +1,5 @@
 // Native (iOS/Android) map built on the Mapbox Maps SDK via @rnmapbox/maps.
-// Draws the route path, the route being raced, tappable route pins, the user's location dot and the ghost marker,
+// Draws the route path (optionally with start/end markers), the route being raced, tappable route pins, the user's location dot and the ghost marker,
 // and either follows the user or fits the camera to the whole route.
 // Requires a EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN.
 import { useImperativeHandle, useMemo, useRef } from 'react';
@@ -43,7 +43,8 @@ function pathExtent(path: LatLng[]) {
  * via `ref.fitTo()`. Each entry in `pins` is drawn as a tappable teardrop whose
  * tip sits on its coordinate. Tapping a pin calls `onPinPress` with the pin's id.
  * `ghostPath` (the route being raced) is drawn as a wide accent line beneath `path`, and
- * `ghostPosition` as a GhostMarker. When `initialBounds` has at least two points the camera
+ * `ghostPosition` as a GhostMarker. With `showEndpoints` and a path of at least two points, a hollow ring marks the
+ * start and a filled dot the end. When `initialBounds` has at least two points the camera
  * opens fitted to them (via `defaultSettings`) instead of on `center`.
  */
 export default function GhostMap({
@@ -53,6 +54,7 @@ export default function GhostMap({
   ghostPosition,
   initialBounds,
   showUser = true,
+  showEndpoints = false,
   fitPath = false,
   pathColor = colors.blue,
   interactive = true,
@@ -180,6 +182,21 @@ export default function GhostMap({
         </Mapbox.ShapeSource>
       )}
 
+      {showEndpoints && hasPath && (
+        <>
+          <Mapbox.MarkerView coordinate={[path![0].lng, path![0].lat]} anchor={{ x: 0.5, y: 0.5 }} allowOverlap>
+            <View style={styles.startRing} />
+          </Mapbox.MarkerView>
+          <Mapbox.MarkerView
+            coordinate={[path![path!.length - 1].lng, path![path!.length - 1].lat]}
+            anchor={{ x: 0.5, y: 0.5 }}
+            allowOverlap
+          >
+            <View style={styles.endDot} />
+          </Mapbox.MarkerView>
+        </>
+      )}
+
       {ghostPosition && (
         <Mapbox.MarkerView
           coordinate={[ghostPosition.lng, ghostPosition.lat]}
@@ -214,6 +231,22 @@ export default function GhostMap({
 
 const styles = StyleSheet.create({
   map: { width: '100%', height: '100%' },
+  startRing: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: colors.bg,
+    borderWidth: 4,
+    borderColor: colors.primary,
+  },
+  endDot: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: colors.primary,
+    borderWidth: 3,
+    borderColor: colors.bg,
+  },
   userDot: {
     width: 18,
     height: 18,

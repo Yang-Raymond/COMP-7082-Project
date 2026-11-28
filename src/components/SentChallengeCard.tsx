@@ -1,8 +1,9 @@
 // One challenge a user sent, with all its recipients: overlapping avatars, "To users · Route name",
 // "user's time · sent ago" and a status line ("race status · days until expiration", or "how many users have raced" plus the latest result).
+// Tapping the card opens the challenge detail.
 
 import React from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { colors } from '../constants/ghostTheme';
 import { formatMinSec, formatTimeLeft, timeAgo } from '../services/format';
 import type { SentChallenge } from '../types/challenge';
@@ -32,9 +33,10 @@ interface Props {
   challenge: SentChallenge;
   /** The current time in milliseconds. */
   now: number;
+  onPress: () => void;
 }
 
-export default function SentChallengeCard({ challenge: c, now }: Props) {
+export default function SentChallengeCard({ challenge: c, now, onPress }: Props) {
   const names = c.recipients.map((r) => r.username);
   const racedCount = c.recipients.filter((r) => r.racedAt != null).length;
   const result = latestResult(c);
@@ -48,7 +50,12 @@ export default function SentChallengeCard({ challenge: c, now }: Props) {
     .join(' · ');
 
   return (
-    <View style={s.card}>
+    <Pressable
+      style={s.card}
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={`Challenge you sent on ${c.route.name}, open details`}
+    >
       <AvatarStack names={names.slice(0, 3)} size={36} />
       <View style={s.body}>
         <Text style={s.title} numberOfLines={1}>
@@ -59,7 +66,7 @@ export default function SentChallengeCard({ challenge: c, now }: Props) {
         </Text>
         <Text style={s.status} numberOfLines={2}>{status}</Text>
       </View>
-    </View>
+    </Pressable>
   );
 }
 
