@@ -91,26 +91,38 @@ CREATE TABLE IF NOT EXISTS friendships (
 
 CREATE UNIQUE INDEX IF NOT EXISTS uq_friendship_pair
   ON friendships (LEAST(requester_id, addressee_id), GREATEST(requester_id, addressee_id));
--- Challenges. One sender challenges one or more friends to beat their time on a route.
+-- Challenges. A challenge is a route its creator has sent to friends, so there is at most one challenge per route
+-- (route_id is the primary key). The first send creates it and sets its deadline; later sends add recipients.
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+     WHERE table_schema = current_schema() AND table_name = 'challenges' AND column_name = 'id'
+  ) THEN
+    DROP TABLE IF EXISTS challenge_recipients, challenges;
+  END IF;
+END $$;
+
 CREATE TABLE IF NOT EXISTS challenges (
-  id         INTEGER     GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-  route_id   INTEGER     NOT NULL REFERENCES routes (id) ON DELETE CASCADE,
-  sender_id  INTEGER     NOT NULL REFERENCES users (id) ON DELETE CASCADE,
-  sender_ms  INTEGER     NOT NULL, --sender's best time on the route when the challenge was sent
+  route_id   INTEGER     PRIMARY KEY REFERENCES routes (id) ON DELETE CASCADE,
+  sender_id  INTEGER     NOT NULL REFERENCES users (id) ON DELETE CASCADE, -- the route's creator
+  sender_ms  INTEGER     NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  expires_at TIMESTAMPTZ, -- optional expiration time
+  expires_at TIMESTAMPTZ, -- optional deadline for the whole challenge, set when sending a challenge to friends.
   CHECK (expires_at IS NULL OR expires_at > created_at)
 );
 
 CREATE INDEX IF NOT EXISTS idx_challenges_sender ON challenges (sender_id);
 
+-- The friends a challenge was sent to, and the result of each one who finished it.
 CREATE TABLE IF NOT EXISTS challenge_recipients (
-  challenge_id INTEGER     NOT NULL REFERENCES challenges (id) ON DELETE CASCADE,
+  route_id     INTEGER     NOT NULL REFERENCES challenges (route_id) ON DELETE CASCADE,
   recipient_id INTEGER     NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+  sent_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
   run_id       INTEGER     REFERENCES runs (id) ON DELETE SET NULL,
   duration_ms  INTEGER,
   raced_at     TIMESTAMPTZ,
-  PRIMARY KEY (challenge_id, recipient_id)
+  PRIMARY KEY (route_id, recipient_id)
 );
 
 -- Challenges that haven't been raced yet

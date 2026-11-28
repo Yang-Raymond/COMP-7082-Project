@@ -1,9 +1,10 @@
 // Shapes of the challenge data the server sends from GET /challenges (see server/src/challenges.ts).
-// All times are in milliseconds: durations (senderMs, mineMs, ...) and epoch timestamps (createdAt, expiresAt, racedAt).
+// A challenge is a route its creator has sent to friends, so every `id` here is the route's server id.
+// All times are in milliseconds: durations (senderMs, timeMs, ...) and epoch timestamps (createdAt, expiresAt, finishedAt).
 // Also defines ChallengeDetailTarget: which challenge (and from which tab) the detail screen is showing.
 import type { ActivityType } from './route';
 
-/** The route a challenge is on, summarised for the lists. `id` is the server route id (what fetchRoute takes). */
+/** The route a challenge is made of, summarised for the lists. `id` is the server route id (what fetchRoute takes). */
 export interface ChallengeRoute {
   id: string;
   name: string;
@@ -11,7 +12,7 @@ export interface ChallengeRoute {
   activity: ActivityType;
 }
 
-/** A challenge a friend sent me that I haven't raced yet and hasn't expired. */
+/** A route a friend sent me as a challenge that I haven't raced yet and hasn't expired. */
 export interface ToRaceChallenge {
   id: string;
   route: ChallengeRoute;
@@ -32,7 +33,7 @@ export interface SentRecipient {
   racedAt: number | null;
 }
 
-/** A challenge I sent that is still open: not expired, and at least one recipient hasn't raced. */
+/** A route I sent as a challenge that is still open: not expired, and at least one recipient hasn't raced. */
 export interface SentChallenge {
   id: string;
   route: ChallengeRoute;
@@ -43,18 +44,30 @@ export interface SentChallenge {
   recipients: SentRecipient[];
 }
 
-/** One finished race against one opponent. `role` says whether I received or sent the challenge. */
+/** One person in a finished challenge: the creator, or a recipient who finished it. */
+export interface FinishedParticipant {
+  username: string;
+  /** The creator's original recording time, or the recipient's challenge run (the one that settled it). */
+  timeMs: number;
+  /** True for the signed-in user. */
+  isMe: boolean;
+}
+
+/** A finished challenge, one per challenge. `role` says whether I received it or created (sent) it. */
 export interface FinishedChallenge {
-  /** Unique per challenge and recipient. */
   id: string;
   role: 'received' | 'sent';
   route: ChallengeRoute;
-  opponent: string;
-  mineMs: number;
-  theirsMs: number;
+  /** Username of the creator. */
+  sender: string;
+  /** Usernames of everyone the route was sent to, including those who didn't finish. */
+  recipients: string[];
+  /** The creator plus every recipient who finished, fastest first. My result is worked out from these. */
+  participants: FinishedParticipant[];
   createdAt: number;
   expiresAt: number | null;
-  racedAt: number;
+  /** When I finished it (received) or when the last recipient did (sent). */
+  finishedAt: number;
 }
 
 /** Everything GET /challenges returns. */

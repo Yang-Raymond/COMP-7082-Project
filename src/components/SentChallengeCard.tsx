@@ -1,21 +1,13 @@
-// One challenge a user sent, with all its recipients: overlapping avatars, "To users · Route name",
+// One challenge (a route) a user sent, with all its recipients: overlapping avatars, "To users · Route name",
 // "user's time · sent ago" and a status line ("race status · days until expiration", or "how many users have raced" plus the latest result).
 // Tapping the card opens the challenge detail.
 
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { colors } from '../constants/ghostTheme';
-import { formatMinSec, formatTimeLeft, timeAgo } from '../services/format';
+import { formatMinSec, formatTimeLeft, recipientAvatarNames, recipientNames, timeAgo } from '../services/format';
 import type { SentChallenge } from '../types/challenge';
 import AvatarStack from './AvatarStack';
-
-const SHOWN_NAMES = 2; // names spelled out before "+N"
-
-/** "user1", "user1, user2" or "user1, user2 +1": the recipients' names, at most SHOWN_NAMES spelled out. */
-function recipientNames(names: string[]): string {
-  const shown = names.slice(0, SHOWN_NAMES).join(', ');
-  return names.length > SHOWN_NAMES ? `${shown} +${names.length - SHOWN_NAMES}` : shown;
-}
 
 /** The most recent result as a sentence (eg "user1 beat you by 0:02"), or null if nobody raced. */
 function latestResult(c: SentChallenge): string | null {
@@ -56,7 +48,7 @@ export default function SentChallengeCard({ challenge: c, now, onPress }: Props)
       accessibilityRole="button"
       accessibilityLabel={`Challenge you sent on ${c.route.name}, open details`}
     >
-      <AvatarStack names={names.slice(0, 3)} size={36} />
+      <AvatarStack names={recipientAvatarNames(names)} size={36} />
       <View style={s.body}>
         <Text style={s.title} numberOfLines={1}>
           To {recipientNames(names)} {'·'} {c.route.name}

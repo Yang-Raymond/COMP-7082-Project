@@ -1,4 +1,4 @@
-// Loads user's three challenge lists, and send a challenge.
+// Loads user's three challenge lists, and sends a route to friends as a challenge.
 import { authedApi } from '../auth/auth';
 import type { ChallengeLists } from '../types/challenge';
 
@@ -6,8 +6,10 @@ import type { ChallengeLists } from '../types/challenge';
 export const getChallenges = () => authedApi<ChallengeLists>('/challenges');
 
 /**
- * Challenges friends to beat user's best time on a route. `friendIds` are the ids from GET /friends, `routeId` is the
- * server route id and `expiresAt` an optional time in milliseconds. Resolves with the new challenge's id.
+ * Sends a route the user created to friends as a challenge. `friendIds` are the ids from GET /friends and `routeId`
+ * is the server route id. The first send creates the challenge and `expiresAt` (optional, milliseconds) sets its
+ * deadline. Later sends add recipients to the same challenge and ignore `expiresAt`. Resolves with the route id and
+ * how many new recipients were added. Rejects if the challenge is closed.
  */
 export const sendChallenge = (input: { routeId: string; friendIds: string[]; expiresAt?: number }) =>
-  authedApi<{ id: string }>('/challenges', { ...input, routeId: Number(input.routeId) });
+  authedApi<{ id: string; added: number }>('/challenges', { ...input, routeId: Number(input.routeId) });

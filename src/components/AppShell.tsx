@@ -129,7 +129,7 @@ function Shell() {
       try {
         setRaceRoute(await fetchRoute(c.route.id));
       } catch (e) {
-        showNotice('Challenges', e instanceof Error && e.message ? e.message : "Couldn't open this challenge's route.");
+        showNotice('Challenges', e instanceof Error && e.message ? e.message : "Couldn't open this challenge.");
         challenges.reload();
       }
     });

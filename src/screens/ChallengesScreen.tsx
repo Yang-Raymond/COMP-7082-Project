@@ -1,8 +1,8 @@
-// Challenges tab: challenges between users and his friends, in three tabs.
-//   To race:  challenges friends sent to the user that the user haven't raced yet, soonest expiry first. Start opens the race.
+// Challenges tab. A challenge is a route its creator has sent to friends; this screen lists them in three tabs.
+//   To race:  routes friends sent to the user that the user hasn't finished yet, soonest deadline first. Start opens the race.
+//   Sent:     routes the user sent that are still open, one card per challenge with all its recipients.
+//   Finished: one card per challenge the user finished (or, as creator, that has closed), with Won / Lost / Tied.
 // Tapping any card opens the challenge detail. The selected tab is owned by the parent so it survives opening the detail.
-//   Sent:     challenges the user sent that are still open, one card per challenge with all its recipients.
-//   Finished: races that are done, with who won.
 import { Ionicons } from '@expo/vector-icons';
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';

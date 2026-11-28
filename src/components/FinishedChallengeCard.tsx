@@ -1,22 +1,20 @@
-// One finished race against one opponent: avatar, "Opponent · Route", "Date · your time vs their time",
-// the time difference on the right and Won / Lost / Tied. Tapping the card opens the challenge detail.
+// One finished challenge (a route sent to friends): the recipient sees the challenger's avatar and "Challenger · Route",
+// the creator sees the recipients' overlapping avatars and "To A, B +N · Route". The sub line is "Date · my time vs
+// the time I'm compared with", with the time difference on the right and Won / Lost / Tied (worked out live from
+// everyone who finished, see challengeOutcome). Tapping the card opens the challenge detail.
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { colors } from '../constants/ghostTheme';
-import { formatDelta, formatMinSec } from '../services/format';
+import { challengeOutcome } from '../services/challengeOutcome';
+import { formatDelta, formatMinSec, recipientAvatarNames, recipientNames } from '../services/format';
 import type { FinishedChallenge } from '../types/challenge';
 import Avatar from './Avatar';
+import AvatarStack from './AvatarStack';
 
-type Outcome = { label: 'Won' | 'Lost' | 'Tied'; color: string };
+/** Result label colours, from the theme. */
+const RESULT_COLOR = { Won: colors.ahead, Lost: colors.behind, Tied: colors.muted } as const;
 
-/** Won when my time is lower, Lost when higher, Tied when equal. Colours come from the theme. */
-function outcomeOf(mineMs: number, theirsMs: number): Outcome {
-  if (mineMs < theirsMs) return { label: 'Won', color: colors.ahead };
-  if (mineMs > theirsMs) return { label: 'Lost', color: colors.behind };
-  return { label: 'Tied', color: colors.muted };
-}
-
-/** the day the race was finished. */
+/** the day the challenge was finished. */
 const day = (ms: number) => new Date(ms).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 
 interface Props {
@@ -25,26 +23,29 @@ interface Props {
 }
 
 export default function FinishedChallengeCard({ challenge: c, onPress }: Props) {
-  const outcome = outcomeOf(c.mineMs, c.theirsMs);
+  const { result, mineMs, otherMs, deltaMs } = challengeOutcome(c.participants);
+  const color = RESULT_COLOR[result];
+  const sentByMe = c.role === 'sent';
+  const who = sentByMe ? `To ${recipientNames(c.recipients)}` : c.sender;
   return (
     <Pressable
       style={s.card}
       onPress={onPress}
       accessibilityRole="button"
-      accessibilityLabel={`Finished race against ${c.opponent} on ${c.route.name}, open details`}
+      accessibilityLabel={`Finished challenge ${sentByMe ? 'you sent' : `from ${c.sender}`} on ${c.route.name}, ${result}, open details`}
     >
-      <Avatar name={c.opponent} size={40} />
+      {sentByMe ? <AvatarStack names={recipientAvatarNames(c.recipients)} size={36} /> : <Avatar name={c.sender} size={40} />}
       <View style={s.body}>
         <Text style={s.title} numberOfLines={1}>
-          {c.opponent} {'·'} {c.route.name}
+          {who} {'·'} {c.route.name}
         </Text>
         <Text style={s.sub} numberOfLines={1}>
-          {day(c.racedAt)} {'·'} {formatMinSec(c.mineMs)} vs {formatMinSec(c.theirsMs)}
+          {day(c.finishedAt)} {'·'} {formatMinSec(mineMs)} vs {formatMinSec(otherMs)}
         </Text>
       </View>
       <View style={s.result}>
-        <Text style={[s.delta, { color: outcome.color }]}>{formatDelta(c.mineMs - c.theirsMs)}</Text>
-        <Text style={[s.outcome, { color: outcome.color }]}>{outcome.label}</Text>
+        <Text style={[s.delta, { color }]}>{formatDelta(deltaMs)}</Text>
+        <Text style={[s.outcome, { color }]}>{result}</Text>
       </View>
     </Pressable>
   );

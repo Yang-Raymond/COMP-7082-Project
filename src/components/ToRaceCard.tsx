@@ -33,7 +33,7 @@ export default function ToRaceCard({ challenge: c, onPress, onStart, now }: Prop
         style={({ pressed }) => [s.details, pressed && { opacity: 0.8 }]}
         onPress={onPress}
         accessibilityRole="button"
-        accessibilityLabel={`${c.sender}'s challenge on ${c.route.name}, open details`}
+        accessibilityLabel={`${c.route.name}, challenge from ${c.sender}, open details`}
       >
         {soon && <Text style={s.soon}>Expiring soon {'·'} {formatTimeLeft(c.expiresAt!, now)}</Text>}
         <View style={s.row}>
@@ -50,7 +50,7 @@ export default function ToRaceCard({ challenge: c, onPress, onStart, now }: Prop
         style={({ pressed }) => [s.start, pressed && { opacity: 0.8 }]}
         onPress={onStart}
         accessibilityRole="button"
-        accessibilityLabel={`Start ${c.sender}'s challenge on ${c.route.name}`}
+        accessibilityLabel={`Start ${c.route.name}, challenge from ${c.sender}`}
       >
         <Text style={s.startText}>Start</Text>
       </Pressable>

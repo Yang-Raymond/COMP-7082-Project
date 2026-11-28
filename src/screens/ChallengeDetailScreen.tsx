@@ -26,14 +26,17 @@ interface Props {
   onStart: (route: SavedRoute) => void;
 }
 
-/** The sender's time, used for the third stat when the leaderboard can't supply the #1 time. Null when unknown. */
+/**
+ * The time for the third stat when the leaderboard can't supply the #1 time: the creator's time for To race and
+ * Sent, and the lowest participant time for Finished. Null when unknown.
+ */
 function senderTime(target: ChallengeDetailTarget): number | null {
   switch (target.kind) {
     case 'toRace':
     case 'sent':
       return target.challenge.senderMs;
     case 'finished':
-      return target.challenge.role === 'received' ? target.challenge.theirsMs : target.challenge.mineMs;
+      return Math.min(...target.challenge.participants.map((p) => p.timeMs));
   }
 }
 
@@ -50,7 +53,7 @@ function Stat({ label, value }: { label: string; value: string }) {
 /**
  * Loads the route and its leaderboard in parallel whenever `target` changes (an `alive` flag drops results that
  * arrive after the screen has moved on). A route failure replaces the content with a message. Aleaderboard-only
- * failure keeps the route and stats and shows a small note, with the third stat falling back to the sender's time.
+ * failure keeps the route and stats and shows a small note, with the third stat falling back to senderTime().
  */
 export default function ChallengeDetailScreen({ target, onBack, onStart }: Props) {
   const insets = useSafeAreaInsets();

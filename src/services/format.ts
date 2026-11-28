@@ -1,5 +1,5 @@
 // Small display helpers shared by the screens: clock and race times, distances, dates, and relative times
-// such as "2h ago" or "5h left". The relative-time helpers take an optional `now` so they can be unit tested.
+// such as "2h ago" or "5h left", and the "To A, B +N" recipient naming used by the challenge cards. The relative-time helpers take an optional `now` so they can be unit tested.
 const pad = (n: number) => String(n).padStart(2, '0');
 
 
@@ -63,4 +63,18 @@ export function formatDelta(ms: number): string {
   const s = Math.round(Math.abs(ms) / 1000);
   if (s === 0) return '0:00';
   return `${ms < 0 ? '\u2212' : '+'}${Math.floor(s / 60)}:${pad(s % 60)}`;
+}
+
+const SHOWN_NAMES = 2; // names spelled out before "+N"
+const SHOWN_AVATARS = 3; // avatars drawn in a stack
+
+/** "user1", "user1, user2" or "user1, user2 +1": the recipients' names, at most two spelled out. */
+export function recipientNames(names: string[]): string {
+  const shown = names.slice(0, SHOWN_NAMES).join(', ');
+  return names.length > SHOWN_NAMES ? `${shown} +${names.length - SHOWN_NAMES}` : shown;
+}
+
+/** The names whose avatars are drawn in the overlapping stack next to recipientNames (at most three). */
+export function recipientAvatarNames(names: string[]): string[] {
+  return names.slice(0, SHOWN_AVATARS);
 }
